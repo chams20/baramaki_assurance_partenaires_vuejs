@@ -1,0 +1,78 @@
+/*
+ * Jetons de couleur BARAMAKI — source unique pour toutes les couleurs de cet
+ * espace, copiés tels quels depuis baramaki_assurance_admin_vuejs (même
+ * système de design, voir docs/refonte-backend/11-espace-partenaires-vuejs.md
+ * côté back — "construit avec le même thème dès sa création, pas à
+ * rattraper après coup"). Toute page/composant doit utiliser ces variables
+ * plutôt que des couleurs codées en dur.
+ *
+ * Le thème (clair/sombre) sera choisi dans Paramètres, appliqué via
+ * l'attribut data-theme sur <html> — même mécanisme que les deux autres
+ * dépôts front, à brancher quand cet espace aura ses Paramètres.
+ * Défaut : clair (data-theme absent ou "light").
+ */
+:root {
+  /* Marque */
+  --color-primary: #040677;
+  --color-primary-dark: #030555;
+  --color-accent: #1acc8d;
+  --color-accent-dark: #13a872;
+
+  /* Neutres */
+  --color-surface: #ffffff;
+  --color-bg: #f4f6f8;
+  --color-hover-bg: #f8fafc;
+  --color-hover-bg-alt: #f1f5f9;
+  --color-heading: #1e293b;
+  --color-text: #374151;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-border: #e5e7eb;
+  --color-scrollbar-thumb: #cbd5e1;
+
+  /* Sémantique */
+  --color-danger: #dc2626;
+  --color-danger-dark: #b91c1c;
+  --color-danger-bg: #fee2e2;
+  --color-warning-text: #854d0e;
+  --color-warning-bg: #fef9c3;
+
+  --color-backdrop: rgba(15, 23, 42, 0.5);
+
+  /* Typo */
+  --font-heading: 'Raleway', sans-serif;
+  --font-nav: 'Poppins', sans-serif;
+  --font-body: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+}
+
+/* Mode sombre — même liste de variables, valeurs adaptées (voir commentaire
+   dans le fichier source côté admin pour le détail des choix de contraste). */
+:root[data-theme='dark'] {
+  --color-primary: #6b76f5;
+  --color-primary-dark: #5a64e8;
+  --color-accent: #1acc8d;
+  --color-accent-dark: #3fdba1;
+
+  --color-surface: #1f2937;
+  --color-bg: #111827;
+  --color-hover-bg: #273244;
+  --color-hover-bg-alt: #2b3648;
+  --color-heading: #f3f4f6;
+  --color-text: #e5e7eb;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280;
+  --color-border: #374151;
+  --color-scrollbar-thumb: #475569;
+
+  --color-danger: #f87171;
+  --color-danger-dark: #ef4444;
+  --color-danger-bg: rgba(239, 68, 68, 0.15);
+  --color-warning-text: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.15);
+
+  --color-backdrop: rgba(226, 232, 240, 0.18);
+}
+
+:root[data-theme='dark'] body {
+  background: var(--color-bg);
+}

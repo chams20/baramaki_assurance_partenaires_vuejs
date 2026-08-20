@@ -34,5 +34,6 @@ npm run build
   `baramaki_assurance_admin_vuejs` (contrat JWT + refresh déjà éprouvé, rien à réinventer).
 - `src/assets/design-tokens.css` — mêmes jetons de couleur que l'admin, copiés tels quels dès la
   création de ce projet plutôt que rattrapés après coup.
-- `src/router/index.js` — routes + 2 gardes (hydratation de session, authentification). Pas de garde
-  rôles : `ROLE_PARTNER` n'existe pas encore côté back.
+- `src/router/index.js` — routes + 3 gardes (hydratation de session, authentification, rôle
+  `ROLE_PARTNER`). Un compte authentifié mais sans `ROLE_PARTNER` est déconnecté et renvoyé vers
+  `/acces-refuse` (`ForbiddenPage.vue`) plutôt que d'atteindre le tableau de bord.
