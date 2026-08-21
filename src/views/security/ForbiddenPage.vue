@@ -1,5 +1,7 @@
 <template>
   <div class="baramaki-error-page">
+    <audio ref="dangerSound" src="/song/acces_denied.mp3"></audio>
+
     <section class="error-card">
       <div class="forbidden-icon">
         <i class="bi bi-shield-exclamation"></i>
@@ -23,8 +25,34 @@
 </template>
 
 <script>
+// Même son "accès refusé" que forbiddenPage.vue côté admin — même fichier
+// (public/song/acces_denied.mp3), même patron de lecture (voir tryPlaySound).
 export default {
   name: 'ForbiddenPage',
+  mounted() {
+    this.tryPlaySound()
+  },
+  beforeUnmount() {
+    document.removeEventListener('click', this.tryPlaySound)
+    document.removeEventListener('keydown', this.tryPlaySound)
+  },
+  methods: {
+    tryPlaySound() {
+      const audio = this.$refs.dangerSound
+      if (!audio) return
+
+      audio.play().catch((err) => {
+        // La plupart des navigateurs bloquent l'audio tant qu'aucun geste
+        // utilisateur direct n'a eu lieu sur CETTE page (arriver ici via une
+        // redirection du router, sans clic, en est le cas typique). On
+        // journalise pour comprendre (au lieu d'avaler l'erreur), et on
+        // retente au premier clic/touche sur la page.
+        console.warn('[ForbiddenPage] lecture audio bloquée par le navigateur, en attente d\'un geste utilisateur :', err)
+        document.addEventListener('click', this.tryPlaySound, { once: true })
+        document.addEventListener('keydown', this.tryPlaySound, { once: true })
+      })
+    },
+  },
 }
 </script>
 
@@ -67,6 +95,7 @@ export default {
   font-size: 1.7rem;
   color: #ff6b7a;
   box-shadow: 0 0 30px rgba(223, 21, 41, 0.45);
+  animation: pulse 1.8s ease-in-out infinite;
 }
 
 .error-code {
@@ -131,6 +160,16 @@ export default {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 30px rgba(223, 21, 41, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 42px rgba(223, 21, 41, 0.7);
   }
 }
 </style>
