@@ -23,6 +23,13 @@ export default defineConfig([
 
   js.configs.recommended,
   ...pluginVue.configs['flat/essential'],
+  {
+    // Règle héritée de Vue 2 (categories: vue2-essential, deprecated) : `v-model:prop`
+    // multiple est une syntaxe Vue 3 valide et voulue (voir PhoneInput.vue), pas une erreur.
+    rules: {
+      'vue/no-v-model-argument': 'off',
+    },
+  },
 
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 

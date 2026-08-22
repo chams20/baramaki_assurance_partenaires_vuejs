@@ -31,6 +31,26 @@ const router = createRouter({
       },
     },
     {
+      path: '/forfaits',
+      name: 'choose-plan',
+      component: () => import('@/views/dashboard/ChoosePlanPage.vue'),
+      meta: {
+        title: 'BARAMAKI Partenaires | Forfaits',
+        requiresAuth: true,
+        roles: ['ROLE_PARTNER'],
+      },
+    },
+    {
+      path: '/mon-entreprise',
+      name: 'my-company',
+      component: () => import('@/views/dashboard/MyCompanyPage.vue'),
+      meta: {
+        title: 'BARAMAKI Partenaires | Mon entreprise',
+        requiresAuth: true,
+        roles: ['ROLE_PARTNER'],
+      },
+    },
+    {
       path: '/acces-refuse',
       name: 'forbidden',
       component: () => import('@/views/security/ForbiddenPage.vue'),
