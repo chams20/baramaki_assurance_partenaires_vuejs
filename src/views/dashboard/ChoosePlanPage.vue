@@ -1,129 +1,178 @@
 <template>
-  <div class="dashboard">
-    <header class="dash-header">
-      <div class="dash-brand">
-        <img src="/img/logo_1024.png" alt="BARAMAKI" class="dash-brand-logo" />
-        <span class="dash-brand-name">BARAMAKI <span class="dash-brand-accent">Partenaires</span></span>
-      </div>
-      <router-link to="/tableau-de-bord" class="back-link">
-        <i class="bi bi-arrow-left"></i> Tableau de bord
-      </router-link>
-    </header>
+  <div class="plans-page">
+    <template v-if="!viewingPlan">
+        <h1 class="plans-title">Choisissez votre forfait</h1>
+        <p class="plans-subtitle">Le prix affiché est figé au moment de la souscription — il ne change plus
+          ensuite, même si une réduction en cours se termine ou que le tarif catalogue évolue.</p>
 
-    <main class="plans-main">
-      <h1 class="plans-title">Choisissez votre forfait</h1>
-      <p class="plans-subtitle">Le prix affiché est figé au moment de la souscription — il ne change plus ensuite,
-        même si une réduction en cours se termine ou que le tarif catalogue évolue.</p>
+        <div class="period-pills">
+          <button
+            v-for="period in PERIODS"
+            :key="period.value"
+            type="button"
+            class="period-pill"
+            :class="{ 'period-pill--on': selectedPeriod === period.value }"
+            @click="selectedPeriod = period.value"
+          >
+            {{ period.label }}
+          </button>
+        </div>
 
-      <div class="period-pills">
-        <button
-          v-for="period in PERIODS"
-          :key="period.value"
-          type="button"
-          class="period-pill"
-          :class="{ 'period-pill--on': selectedPeriod === period.value }"
-          @click="selectedPeriod = period.value"
-        >
-          {{ period.label }}
-        </button>
-      </div>
+        <div class="currency-pills" title="Convertir l'affichage des prix — la souscription reste toujours en KMF">
+          <button
+            type="button"
+            class="currency-pill"
+            :class="{ 'currency-pill--on': displayCurrency === 'KMF' }"
+            @click="displayCurrency = 'KMF'"
+          >
+            KMF
+          </button>
+          <button
+            type="button"
+            class="currency-pill"
+            :class="{ 'currency-pill--on': displayCurrency === 'EUR' }"
+            @click="displayCurrency = 'EUR'"
+          >
+            €
+          </button>
+        </div>
 
-      <div class="currency-pills" title="Convertir l'affichage des prix — la souscription reste toujours en KMF">
-        <button
-          type="button"
-          class="currency-pill"
-          :class="{ 'currency-pill--on': displayCurrency === 'KMF' }"
-          @click="displayCurrency = 'KMF'"
-        >
-          KMF
-        </button>
-        <button
-          type="button"
-          class="currency-pill"
-          :class="{ 'currency-pill--on': displayCurrency === 'EUR' }"
-          @click="displayCurrency = 'EUR'"
-        >
-          €
-        </button>
-      </div>
+        <div v-if="loading" class="plans-loading">
+          <div class="plans-spinner"></div>
+          <p>Chargement des forfaits...</p>
+        </div>
 
-      <div v-if="loading" class="plans-loading">
-        <div class="plans-spinner"></div>
-        <p>Chargement des forfaits...</p>
-      </div>
+        <div v-else-if="!plans.length" class="plans-empty">
+          <i class="bi bi-tags"></i>
+          <p>Aucun forfait disponible pour l'instant.</p>
+        </div>
 
-      <div v-else-if="!plans.length" class="plans-empty">
-        <i class="bi bi-tags"></i>
-        <p>Aucun forfait disponible pour l'instant.</p>
-      </div>
-
-      <div v-else class="plans-grid">
-        <div v-for="p in plans" :key="p.uuid" class="plan-card" :class="{ 'plan-card--highlighted': p.isHighlighted }">
-          <div v-if="priceFor(p)?.activePromotion" class="plan-promo-badge">
-            {{ p.isHighlighted ? 'Offre spéciale' : '' }}
-            <template v-if="p.isHighlighted"> · </template>
-            {{ priceFor(p).activePromotion.discountPercent }} % de réduction
-          </div>
-
-          <h3 class="plan-name" :class="{ 'plan-name--badge-pad': priceFor(p)?.activePromotion }">
-            <i v-if="p.isHighlighted" class="bi bi-stars"></i> {{ p.name }}
-          </h3>
-          <p v-if="p.description" class="plan-desc">{{ p.description }}</p>
-
-          <template v-if="priceFor(p)">
-            <div class="plan-price-block">
-              <span v-if="priceFor(p).activePromotion" class="plan-price-old">
-                {{ formatAmount(priceFor(p).amount) }}
-              </span>
-              <span class="plan-price-now">
-                {{ formatAmount(priceFor(p).effectiveAmount) }}<span class="plan-price-unit">{{ periodSuffix }}</span>
-              </span>
+        <div v-else class="plans-grid">
+          <div v-for="p in plans" :key="p.uuid" class="plan-card" :class="{ 'plan-card--highlighted': p.isHighlighted }">
+            <div v-if="priceFor(p, selectedPeriod)?.activePromotion" class="plan-promo-badge">
+              {{ p.isHighlighted ? 'Offre spéciale' : '' }}
+              <template v-if="p.isHighlighted"> · </template>
+              {{ priceFor(p, selectedPeriod).activePromotion.discountPercent }} % de réduction
             </div>
 
+            <h3 class="plan-name" :class="{ 'plan-name--badge-pad': priceFor(p, selectedPeriod)?.activePromotion }">
+              <i v-if="p.isHighlighted" class="bi bi-stars"></i> {{ p.name }}
+            </h3>
+            <p v-if="p.description" class="plan-desc">{{ p.description }}</p>
+
+            <div v-if="priceFor(p, selectedPeriod)" class="plan-price-block">
+              <span v-if="priceFor(p, selectedPeriod).activePromotion" class="plan-price-old">
+                {{ formatAmount(priceFor(p, selectedPeriod).amount) }}
+              </span>
+              <span class="plan-price-now">
+                {{ formatAmount(priceFor(p, selectedPeriod).effectiveAmount) }}<span class="plan-price-unit">{{ periodSuffixFor(selectedPeriod) }}</span>
+              </span>
+            </div>
+            <p v-else class="plan-no-price">Pas encore disponible pour cette période — voir l'offre pour les
+              autres durées.</p>
+
             <button
+              v-if="!currentSubscription || isCurrentPlan(p) || isEligibleUpgrade(p)"
               type="button"
               class="plan-btn"
               :class="{ 'plan-btn--filled': p.isHighlighted }"
-              :disabled="isCurrentPlan(p) || !!subscribingUuid"
-              @click="openConfirm(p)"
+              :disabled="isCurrentPlan(p)"
+              @click="openPlanDetail(p)"
             >
-              {{ isCurrentPlan(p) ? 'Abonnement actuel' : subscribingUuid === priceFor(p).uuid ? 'Souscription...' : 'Souscrire' }}
+              {{ isCurrentPlan(p) ? 'Abonnement actuel' : 'Voir l\'offre' }}
+            </button>
+            <p v-else-if="currentSubscription?.status === 'pending'" class="plan-no-price">
+              Terminez d'abord le paiement de votre abonnement en cours.
+            </p>
+            <p v-else class="plan-no-price">Forfait inférieur à votre abonnement actuel.</p>
+
+            <ul class="plan-features">
+              <li class="plan-feature--quota"><i class="bi bi-speedometer2"></i> {{ quotaLabel(p.monthlyRequestQuota) }}</li>
+              <li v-for="(f, idx) in p.features" :key="idx" :class="{ 'plan-feature--excluded': !f.included }">
+                <i class="bi" :class="f.included ? 'bi-check2' : 'bi-dash'"></i> {{ f.text }}
+              </li>
+            </ul>
+          </div>
+        </div>
+      </template>
+
+      <!-- Vue dédiée à une offre — choix réel de la période + confirmation,
+           façon page produit Hostinger plutôt qu'un simple modal. -->
+      <div v-else class="plan-detail">
+        <button type="button" class="plan-detail-back" @click="closePlanDetail">
+          <i class="bi bi-arrow-left"></i> Retour aux forfaits
+        </button>
+
+        <div class="plan-card plan-detail-card" :class="{ 'plan-card--highlighted': viewingPlan.isHighlighted }">
+          <div v-if="viewingPlan.isHighlighted" class="plan-detail-banner">
+            <i class="bi bi-star-fill"></i> {{ viewingPlan.highlightLabel || 'Mis en avant' }}
+          </div>
+
+          <h2 class="plan-detail-name">{{ viewingPlan.name }}</h2>
+          <p v-if="viewingPlan.description" class="plan-desc plan-detail-desc">{{ viewingPlan.description }}</p>
+
+          <div class="period-pills">
+            <button
+              v-for="period in PERIODS"
+              :key="period.value"
+              type="button"
+              class="period-pill"
+              :class="{ 'period-pill--on': detailPeriod === period.value }"
+              @click="detailPeriod = period.value"
+            >
+              {{ period.label }}
+            </button>
+          </div>
+
+          <template v-if="priceFor(viewingPlan, detailPeriod)">
+            <div class="plan-price-block plan-detail-price-block">
+              <span v-if="priceFor(viewingPlan, detailPeriod).activePromotion" class="plan-price-old">
+                {{ formatAmount(priceFor(viewingPlan, detailPeriod).amount) }}
+              </span>
+              <span class="plan-price-now">
+                {{ formatAmount(priceFor(viewingPlan, detailPeriod).effectiveAmount) }}<span class="plan-price-unit">{{ periodSuffixFor(detailPeriod) }}</span>
+              </span>
+              <span v-if="priceFor(viewingPlan, detailPeriod).activePromotion" class="plan-detail-promo">
+                -{{ priceFor(viewingPlan, detailPeriod).activePromotion.discountPercent }} %
+              </span>
+            </div>
+
+            <p v-if="currentSubscription" class="plan-detail-hint">
+              Le temps restant sur votre abonnement actuel sera déduit du montant à régler — le montant exact
+              vous sera confirmé une fois validé.
+            </p>
+            <p v-else class="plan-detail-hint">
+              Ce prix reste le vôtre jusqu'à votre prochain renouvellement, même si une réduction en cours se
+              termine ou que le tarif catalogue évolue.
+            </p>
+
+            <div v-if="subscribeError" class="plans-alert">{{ subscribeError }}</div>
+
+            <button
+              type="button"
+              class="plan-btn plan-btn--filled plan-detail-cta"
+              :disabled="isCurrentPlan(viewingPlan) || !!subscribingUuid"
+              @click="confirmSubscribe(viewingPlan)"
+            >
+              {{ ctaLabel(viewingPlan) }}
             </button>
           </template>
           <p v-else class="plan-no-price">Pas encore disponible pour cette période.</p>
 
-          <ul v-if="p.features?.length" class="plan-features">
-            <li v-for="(f, idx) in p.features" :key="idx" :class="{ 'plan-feature--excluded': !f.included }">
+          <ul class="plan-features plan-detail-features">
+            <li class="plan-feature--quota"><i class="bi bi-speedometer2"></i> {{ quotaLabel(viewingPlan.monthlyRequestQuota) }}</li>
+            <li v-for="(f, idx) in viewingPlan.features" :key="idx" :class="{ 'plan-feature--excluded': !f.included }">
               <i class="bi" :class="f.included ? 'bi-check2' : 'bi-dash'"></i> {{ f.text }}
             </li>
           </ul>
         </div>
       </div>
-    </main>
-
-    <!-- Confirmation de souscription -->
-    <div v-if="planToConfirm" class="modal-backdrop" @click.self="planToConfirm = null">
-      <div class="modal-box">
-        <h4 class="modal-title">Confirmer la souscription ?</h4>
-        <p class="modal-text">
-          Souscrire au forfait <strong>{{ planToConfirm.name }}</strong> pour
-          <strong>{{ formatAmount(priceFor(planToConfirm).effectiveAmount) }}{{ periodSuffix }}</strong> ? Ce prix
-          reste le vôtre jusqu'à votre prochain renouvellement.
-        </p>
-        <div v-if="subscribeError" class="plans-alert">{{ subscribeError }}</div>
-        <div class="modal-actions">
-          <button type="button" class="btn-ghost" :disabled="!!subscribingUuid" @click="planToConfirm = null">Annuler</button>
-          <button type="button" class="btn-primary" :disabled="!!subscribingUuid" @click="confirmSubscribe">
-            {{ subscribingUuid ? 'Souscription...' : 'Confirmer' }}
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script>
-import { listAvailablePlans, getMyClient, subscribeToPlan } from '@/services/geo/geoSelfServiceService'
+import { useToast } from 'vue-toastification'
+import { listAvailablePlans, getMyClient, subscribeToPlan, upgradeSubscription } from '@/services/geo/geoSelfServiceService'
 
 const PERIODS = [
   { value: 'monthly', label: 'Mensuel' },
@@ -131,6 +180,12 @@ const PERIODS = [
   { value: 'two_years', label: '24 mois' },
   { value: 'four_years', label: '48 mois' },
 ]
+
+// Période affichée par défaut sur la carte de la grille — "12 mois" comme
+// ancrage (engagement plus long, tarif dégressif typique), pas forcément le
+// premier prix existant. Repli sur le premier prix trouvé si ce forfait n'a
+// pas de prix 12 mois.
+const DEFAULT_PERIOD_PRIORITY = ['yearly', 'monthly', 'two_years', 'four_years']
 
 // Franc comorien : parité fixe avec l'euro (comme le franc CFA), pas un taux
 // de change flottant — 1 EUR = 491,96775 KMF. Affichage seulement : la
@@ -151,25 +206,55 @@ export default {
   name: 'ChoosePlanPage',
   data() {
     return {
+      toast: useToast(),
       PERIODS,
       plans: [],
       loading: true,
+      // Sélecteur global — juste un aperçu du prix sur toute la grille,
+      // demande explicite : "on a une idée avant d'y aller". Indépendant du
+      // choix fait dans la vue détaillée d'une offre (detailPeriod).
       selectedPeriod: 'monthly',
       displayCurrency: 'KMF',
       myClient: null,
-      planToConfirm: null,
+      // Forfait actuellement ouvert en vue détaillée (remplace la grille) —
+      // demande explicite : plus un simple modal, une vraie page produit par
+      // offre où la période se choisit pour de vrai, façon Hostinger.
+      viewingPlan: null,
+      detailPeriod: 'yearly',
       subscribingUuid: null,
       subscribeError: null,
     }
   },
   computed: {
-    periodSuffix() {
-      return { monthly: ' / mois', yearly: ' / 12 mois', two_years: ' / 24 mois', four_years: ' / 48 mois' }[this.selectedPeriod] || ''
+    // "En cours" au sens large (`active` ou `pending`) — voir
+    // GeoApiSubscription::STATUS_PENDING. Empêche une double souscription au
+    // même forfait pendant que le tout premier paiement est en attente ;
+    // seul un abonnement VRAIMENT `active` autorise un upgrade (le back
+    // l'exige, voir GeoApiPartnerSelfServiceController::findActiveSubscription()).
+    currentSubscription() {
+      return (this.myClient?.subscriptions || []).find((s) => s.status === 'active' || s.status === 'pending') || null
     },
   },
   methods: {
-    priceFor(plan) {
-      return plan.prices.find((p) => p.billingPeriod === this.selectedPeriod) || null
+    priceFor(plan, period) {
+      return plan.prices.find((p) => p.billingPeriod === period) || null
+    },
+    // Période "12 mois" mise en avant sur la carte de la grille par défaut —
+    // repli sur le premier prix existant si ce forfait n'a pas de prix 12 mois.
+    defaultPeriodFor(plan) {
+      const found = DEFAULT_PERIOD_PRIORITY.find((period) => this.priceFor(plan, period))
+      return found || PERIODS[0].value
+    },
+    periodSuffixFor(period) {
+      return { monthly: ' / mois', yearly: ' / 12 mois', two_years: ' / 24 mois', four_years: ' / 48 mois' }[period] || ''
+    },
+    // Upgrade seulement (doc 12 §3) : sort_order sert déjà à classer les
+    // forfaits par gamme côté admin, réutilisé ici plutôt qu'un second champ.
+    // `status === 'active'` explicite : le back n'autorise l'upgrade que
+    // depuis un abonnement VRAIMENT actif, jamais depuis un `pending` en
+    // attente de son premier paiement (findActiveSubscription() côté back).
+    isEligibleUpgrade(plan) {
+      return this.currentSubscription?.status === 'active' && plan.sortOrder > this.currentSubscription.planSortOrder
     },
     formatAmount(amount) {
       if (this.displayCurrency === 'EUR') {
@@ -177,9 +262,19 @@ export default {
       }
       return `${Number(amount).toLocaleString('fr-FR')} KMF`
     },
+    // Le chiffre est stocké brut (200000) — jamais déjà formaté en base.
+    // null = illimité (même convention que doc 12 §2).
+    quotaLabel(quota) {
+      if (quota === null || quota === undefined) return 'Requêtes illimitées'
+      return `${Number(quota).toLocaleString('fr-FR')} requêtes / mois`
+    },
     isCurrentPlan(plan) {
-      const active = (this.myClient?.subscriptions || []).find((s) => s.status === 'active')
-      return active?.planName === plan.name
+      return this.currentSubscription?.planName === plan.name
+    },
+    ctaLabel(plan) {
+      if (this.isCurrentPlan(plan)) return this.currentSubscription?.status === 'pending' ? 'Paiement en attente' : 'Abonnement actuel'
+      if (this.subscribingUuid) return this.currentSubscription ? 'Changement...' : 'Souscription...'
+      return this.currentSubscription ? 'Passer à ce forfait' : 'Souscrire'
     },
     async load() {
       this.loading = true
@@ -191,22 +286,35 @@ export default {
         this.loading = false
       }
     },
-    openConfirm(plan) {
-      if (!this.priceFor(plan)) return
+    openPlanDetail(plan) {
+      this.viewingPlan = plan
+      this.detailPeriod = this.priceFor(plan, this.selectedPeriod) ? this.selectedPeriod : this.defaultPeriodFor(plan)
       this.subscribeError = null
-      this.planToConfirm = plan
     },
-    async confirmSubscribe() {
-      const price = this.priceFor(this.planToConfirm)
+    closePlanDetail() {
+      this.viewingPlan = null
+    },
+    async confirmSubscribe(plan) {
+      const price = this.priceFor(plan, this.detailPeriod)
       if (!price) return
+      const isUpgrade = this.currentSubscription?.status === 'active'
       this.subscribingUuid = price.uuid
       this.subscribeError = null
       try {
-        this.myClient = await subscribeToPlan(price.uuid)
-        this.planToConfirm = null
+        this.myClient = isUpgrade ? await upgradeSubscription(price.uuid) : await subscribeToPlan(price.uuid)
+        if (isUpgrade) {
+          // Le montant réellement dû (après crédit prorata) n'est connu
+          // qu'une fois le back passé — c'est la facture la plus récente.
+          const latestInvoice = (this.myClient.invoices || [])[0]
+          this.toast.success(
+            latestInvoice
+              ? `Forfait changé — ${this.formatAmount(latestInvoice.amount)} à régler pour cette transaction.`
+              : 'Forfait changé.',
+          )
+        }
         this.$router.push('/tableau-de-bord')
       } catch (err) {
-        this.subscribeError = err.response?.data?.message || 'Erreur lors de la souscription.'
+        this.subscribeError = err.response?.data?.message || (isUpgrade ? 'Erreur lors du changement de forfait.' : 'Erreur lors de la souscription.')
       } finally {
         this.subscribingUuid = null
       }
@@ -219,28 +327,6 @@ export default {
 </script>
 
 <style scoped>
-.dashboard { min-height: 100vh; background: var(--color-bg); }
-
-.dash-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 24px; background: var(--color-surface); border-bottom: 1px solid var(--color-border);
-}
-.dash-brand { display: flex; align-items: center; gap: 10px; }
-.dash-brand-logo { width: 32px; height: 32px; object-fit: contain; }
-.dash-brand-name { font-family: var(--font-heading); font-weight: 800; font-size: 1rem; color: var(--color-primary); letter-spacing: 0.02em; }
-.dash-brand-accent { color: var(--color-accent-dark); }
-
-.back-link {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border-radius: 999px; border: 1px solid var(--color-border);
-  background: transparent; color: var(--color-text-secondary);
-  font-family: var(--font-nav); font-size: 0.82rem; font-weight: 500;
-  text-decoration: none; transition: border-color 0.15s, color 0.15s;
-}
-.back-link:hover { border-color: var(--color-primary); color: var(--color-primary); }
-
-.plans-main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 60px; }
-
 .plans-title { font-family: var(--font-heading); font-weight: 800; font-size: 1.6rem; color: var(--color-primary); margin: 0 0 8px; text-align: center; }
 .plans-subtitle { font-size: 0.85rem; color: var(--color-text-secondary); text-align: center; max-width: 560px; margin: 0 auto 24px; line-height: 1.6; }
 
@@ -361,28 +447,67 @@ export default {
 .plan-card--highlighted .plan-feature--excluded { color: rgba(255, 255, 255, 0.35) !important; }
 .plan-card--highlighted .plan-feature--excluded i { color: rgba(255, 255, 255, 0.35) !important; }
 
-/* ── Modal de confirmation ────────────────────────────  */
-.modal-backdrop {
-  position: fixed; inset: 0; background: var(--color-backdrop);
-  display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 20px;
-}
-.modal-box {
-  background: var(--color-surface); border-radius: 16px; padding: 24px;
-  max-width: 440px; width: 100%; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-}
-.modal-title { font-family: var(--font-heading); font-weight: 700; font-size: 1rem; color: var(--color-heading); margin: 0; }
-.modal-text { margin: 12px 0 16px; font-size: 0.85rem; color: var(--color-text-secondary); line-height: 1.5; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.plan-feature--quota { font-weight: 700 !important; }
 
 .plans-alert { background: var(--color-danger-bg); color: var(--color-danger-dark); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
 
-.btn-primary, .btn-ghost {
-  display: inline-flex; align-items: center; gap: 6px; padding: 9px 20px; border-radius: 8px;
-  font-family: var(--font-nav); font-weight: 600; font-size: 0.85rem; cursor: pointer; border: 1px solid transparent;
+/* ── Vue dédiée à une offre (remplace la grille) ──────  */
+.plan-detail { max-width: 560px; margin: 0 auto; }
+
+.plan-detail-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer;
+  font-family: var(--font-nav); font-size: 0.84rem; font-weight: 600; color: var(--color-text-secondary);
+  margin-bottom: 20px; padding: 0; transition: color 0.15s;
 }
-.btn-primary { background: var(--color-primary); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--color-primary-dark); }
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-ghost { background: transparent; border-color: var(--color-border); color: var(--color-text); }
-.btn-ghost:hover:not(:disabled) { border-color: #cbd5e1; background: var(--color-hover-bg); }
+.plan-detail-back:hover { color: var(--color-primary); }
+
+.plan-detail-card {
+  /* Reprend .plan-card / .plan-card--highlighted tel quel — même langage
+     visuel que la grille, juste une carte plus grande et seule. */
+  padding: 36px 32px 32px;
+  transform: none !important;
+}
+
+.plan-detail-banner {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent-dark); font-size: 0.74rem; font-weight: 700;
+  padding: 5px 14px; border-radius: 999px; margin-bottom: 14px;
+}
+.plan-card--highlighted .plan-detail-banner { background: rgba(255, 255, 255, 0.16); color: #fff; }
+
+.plan-detail-name {
+  font-family: var(--font-heading); font-weight: 800; font-size: 1.5rem; color: var(--color-heading);
+  margin: 0 0 8px;
+}
+.plan-card--highlighted .plan-detail-name { color: #fff; }
+
+.plan-detail-desc { font-size: 0.9rem; margin-bottom: 24px; }
+
+.plan-detail-card .period-pills { justify-content: flex-start; margin-bottom: 20px; }
+.plan-card--highlighted .period-pill {
+  border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.65);
+}
+.plan-card--highlighted .period-pill--on {
+  border-color: var(--color-accent); background: var(--color-accent); color: #06281c;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+.plan-detail-price-block { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.plan-detail-price-block .plan-price-old { display: inline; }
+
+.plan-detail-promo {
+  display: inline-flex; align-items: center;
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger);
+  font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+}
+.plan-card--highlighted .plan-detail-promo { background: rgba(255, 255, 255, 0.16); color: #fff; }
+
+.plan-detail-hint { font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0 0 18px; }
+.plan-card--highlighted .plan-detail-hint { color: rgba(255, 255, 255, 0.6); }
+
+.plan-detail-cta { margin-bottom: 0; }
+
+.plan-detail-features { padding-top: 24px; margin-top: 24px; }
 </style>

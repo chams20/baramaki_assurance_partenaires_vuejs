@@ -1,17 +1,6 @@
 <template>
-  <div class="dashboard">
-    <header class="dash-header">
-      <div class="dash-brand">
-        <img src="/img/logo_1024.png" alt="BARAMAKI" class="dash-brand-logo" />
-        <span class="dash-brand-name">BARAMAKI <span class="dash-brand-accent">Partenaires</span></span>
-      </div>
-      <router-link to="/tableau-de-bord" class="back-link">
-        <i class="bi bi-arrow-left"></i> Tableau de bord
-      </router-link>
-    </header>
-
-    <main class="company-main">
-      <h1 class="company-title">Mon entreprise</h1>
+  <div class="company-page">
+    <h1 class="company-title">Mon entreprise</h1>
       <p class="company-subtitle">Nom, logo, coordonnées, adresse du siège et justificatifs — visibles par
         BARAMAKI, jamais par un autre partenaire.</p>
 
@@ -82,6 +71,24 @@
               <PhoneInput v-model:phone="infoForm.companyPhone" v-model:country="infoForm.companyPhoneCountry" :hint="false" />
               <p class="field-hint">Le standard de l'entreprise — distinct du téléphone du contact ci-dessous.</p>
             </div>
+            <div class="fields-grid-head">
+              <span>Identifiants officiels</span>
+              <button type="button" class="info-btn" title="Qu'est-ce que le NIF et le RCCM ?" @click="showIdentifiersInfoModal = true">
+                <i class="bi bi-info-circle"></i>
+              </button>
+            </div>
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label">NIF</label>
+                <input v-model.trim="infoForm.nif" type="text" class="field-control" placeholder="123456A" maxlength="7" />
+                <p class="field-hint">Numéro d'Identification Fiscale (AGID) — 6 chiffres + 1 lettre.</p>
+              </div>
+              <div class="field">
+                <label class="field-label">RCCM</label>
+                <input v-model.trim="infoForm.rccm" type="text" class="field-control" placeholder="KM-MOR-14-B-1234" />
+                <p class="field-hint">Registre du Commerce et du Crédit Mobilier.</p>
+              </div>
+            </div>
             <div class="form-actions">
               <button type="submit" class="btn-primary" :disabled="savingInfo">
                 {{ savingInfo ? 'Enregistrement...' : 'Enregistrer' }}
@@ -97,6 +104,19 @@
             <div class="info-row">
               <span class="info-label">Contact (vous)</span>
               <span>{{ myClient.contactEmail }}<template v-if="myClient.contactPhone"> · {{ myClient.contactPhone }}</template></span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">
+                NIF
+                <button type="button" class="info-btn" title="Qu'est-ce que le NIF et le RCCM ?" @click="showIdentifiersInfoModal = true">
+                  <i class="bi bi-info-circle"></i>
+                </button>
+              </span>
+              <span>{{ myClient.nif || '—' }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">RCCM</span>
+              <span>{{ myClient.rccm || '—' }}</span>
             </div>
           </div>
         </section>
@@ -147,43 +167,53 @@
               </p>
             </div>
 
+            <!-- Verrouillés dès qu'une suggestion vient de l'API — ce
+                 qu'elle a renvoyé fait foi (référentiel Comores maison ou
+                 BAN), pas question qu'une saisie manuelle vienne le
+                 corrompre après coup. "Modifier manuellement" reste
+                 l'échappatoire explicite, comme pour "aucun résultat". -->
+            <div v-if="addressLocked" class="locked-hint">
+              <i class="bi bi-lock-fill"></i> Champs remplis par la suggestion —
+              <button type="button" class="unlock-btn" @click="unlockAddressFields">modifier manuellement</button>
+            </div>
+
             <div class="fields-grid">
               <div class="field">
                 <label class="field-label">Rue</label>
-                <input v-model="addressForm.street" type="text" class="field-control" />
+                <input v-model="addressForm.street" type="text" class="field-control" :disabled="addressLocked" />
               </div>
               <div v-if="addressForm.country !== 'Comores'" class="field">
                 <label class="field-label">Numéro</label>
-                <input v-model="addressForm.streetNumber" type="text" class="field-control" />
+                <input v-model="addressForm.streetNumber" type="text" class="field-control" :disabled="addressLocked" />
               </div>
               <div class="field">
                 <label class="field-label">Complément</label>
-                <input v-model="addressForm.addressComplement" type="text" class="field-control" placeholder="Bât. B, Bureau 5" />
+                <input v-model="addressForm.addressComplement" type="text" class="field-control" placeholder="Bât. B, Bureau 5" :disabled="addressLocked" />
               </div>
               <div class="field">
                 <label class="field-label">{{ addressForm.country === 'Comores' ? 'Commune' : 'Ville' }}</label>
-                <input v-model="addressForm.city" type="text" class="field-control" />
+                <input v-model="addressForm.city" type="text" class="field-control" :disabled="addressLocked" />
               </div>
               <div v-if="addressForm.country !== 'Comores'" class="field">
                 <label class="field-label">Code postal</label>
-                <input v-model="addressForm.postalCode" type="text" class="field-control" />
+                <input v-model="addressForm.postalCode" type="text" class="field-control" :disabled="addressLocked" />
               </div>
               <template v-if="addressForm.country === 'Comores'">
                 <div class="field">
                   <label class="field-label">Île</label>
-                  <input v-model="addressForm.island" type="text" class="field-control" />
+                  <input v-model="addressForm.island" type="text" class="field-control" :disabled="addressLocked" />
                 </div>
                 <div class="field">
                   <label class="field-label">Région</label>
-                  <input v-model="addressForm.region" type="text" class="field-control" />
+                  <input v-model="addressForm.region" type="text" class="field-control" :disabled="addressLocked" />
                 </div>
                 <div class="field">
                   <label class="field-label">Village</label>
-                  <input v-model="addressForm.village" type="text" class="field-control" />
+                  <input v-model="addressForm.village" type="text" class="field-control" :disabled="addressLocked" />
                 </div>
                 <div class="field">
                   <label class="field-label">Quartier</label>
-                  <input v-model="addressForm.neighborhood" type="text" class="field-control" />
+                  <input v-model="addressForm.neighborhood" type="text" class="field-control" :disabled="addressLocked" />
                 </div>
               </template>
             </div>
@@ -244,7 +274,6 @@
       <div v-else class="company-alert">
         Aucune fiche partenaire trouvée pour votre compte — contactez BARAMAKI.
       </div>
-    </main>
 
     <!-- Confirmation déconnexion -->
     <div v-if="showLogoutModal" class="modal-backdrop" @click.self="!loggingOut && (showLogoutModal = false)">
@@ -291,6 +320,37 @@
           <button type="button" class="btn-danger" :disabled="deletingDocument" @click="confirmDeleteDocument">
             {{ deletingDocument ? 'Suppression...' : 'Supprimer' }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal explication NIF / RCCM -->
+    <div v-if="showIdentifiersInfoModal" class="modal-backdrop" @click.self="showIdentifiersInfoModal = false">
+      <div class="modal-box">
+        <div class="modal-head">
+          <h4 class="modal-title">NIF et RCCM, c'est quoi ?</h4>
+          <button type="button" class="modal-close" @click="showIdentifiersInfoModal = false"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="identifier-explain">
+          <p class="identifier-explain-term">NIF — Numéro d'Identification Fiscale</p>
+          <p class="identifier-explain-text">
+            Délivré par l'AGID (Administration Générale des Impôts et des Domaines), c'est l'identifiant
+            fiscal unique de votre entreprise aux Comores. Format : 6 chiffres suivis d'une lettre
+            majuscule (ex. <strong>123456A</strong>).
+          </p>
+          <p class="identifier-explain-term">RCCM — Registre du Commerce et du Crédit Mobilier</p>
+          <p class="identifier-explain-text">
+            C'est la preuve légale que votre entreprise est immatriculée (nomenclature OHADA). Format :
+            Pays-Ville-Année-Type-Numéro (ex. <strong>KM-MOR-14-B-1234</strong> — KM pour les Comores,
+            MOR/MUT/FOM selon le tribunal, B pour une société ou A pour un commerçant individuel).
+          </p>
+          <p class="identifier-explain-text identifier-explain-note">
+            Facultatif pour l'instant, mais recommandé : ces numéros apparaissent sur vos factures BARAMAKI
+            et facilitent votre comptabilité.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-primary" @click="showIdentifiersInfoModal = false">Compris</button>
         </div>
       </div>
     </div>
@@ -400,13 +460,17 @@ export default {
       showRemoveLogoModal: false,
 
       editingInfo: false,
-      infoForm: { companyName: '', companyPhone: '', companyPhoneCountry: 'KM' },
+      infoForm: { companyName: '', companyPhone: '', companyPhoneCountry: 'KM', nif: '', rccm: '' },
       infoError: null,
       savingInfo: false,
+      showIdentifiersInfoModal: false,
 
       editingAddress: false,
       addressForm: emptyAddressForm(),
       addressQuery: '',
+      // true dès qu'une suggestion de l'API est choisie — les champs
+      // deviennent en lecture seule (voir selectSuggestion()/unlockAddressFields()).
+      addressLocked: false,
       suggestions: [],
       searching: false,
       showSuggestions: false,
@@ -498,6 +562,8 @@ export default {
         companyName: this.myClient.companyName || '',
         companyPhone: raw,
         companyPhoneCountry: country,
+        nif: this.myClient.nif || '',
+        rccm: this.myClient.rccm || '',
       }
       this.infoError = null
       this.editingInfo = true
@@ -542,6 +608,7 @@ export default {
       }
       this.addressQuery = ''
       this.suggestions = []
+      this.addressLocked = false
       this.addressError = null
       this.editingAddress = true
     },
@@ -553,6 +620,7 @@ export default {
     onCountryChange() {
       this.addressQuery = ''
       this.suggestions = []
+      this.addressLocked = false
       this.resetSuggestionFields()
     },
     resetSuggestionFields() {
@@ -573,6 +641,7 @@ export default {
       this.showSuggestions = true
 
       if (this.addressQuery.trim() === '') {
+        this.addressLocked = false
         this.resetSuggestionFields()
         return
       }
@@ -609,6 +678,12 @@ export default {
       this.addressQuery = s.label
       this.suggestions = []
       this.showSuggestions = false
+      // Ce que l'API a renvoyé fait foi — verrouillé tant que le partenaire
+      // ne choisit pas explicitement de le modifier à la main.
+      this.addressLocked = true
+    },
+    unlockAddressFields() {
+      this.addressLocked = false
     },
     async handleSaveAddress() {
       this.addressError = null
@@ -700,27 +775,6 @@ export default {
 </script>
 
 <style scoped>
-.dashboard { min-height: 100vh; background: var(--color-bg); }
-
-.dash-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 24px; background: var(--color-surface); border-bottom: 1px solid var(--color-border);
-}
-.dash-brand { display: flex; align-items: center; gap: 10px; }
-.dash-brand-logo { width: 32px; height: 32px; object-fit: contain; }
-.dash-brand-name { font-family: var(--font-heading); font-weight: 800; font-size: 1rem; color: var(--color-primary); letter-spacing: 0.02em; }
-.dash-brand-accent { color: var(--color-accent-dark); }
-
-.back-link {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border-radius: 999px; border: 1px solid var(--color-border);
-  background: transparent; color: var(--color-text-secondary);
-  font-family: var(--font-nav); font-size: 0.82rem; font-weight: 500;
-  text-decoration: none; transition: border-color 0.15s, color 0.15s;
-}
-.back-link:hover { border-color: var(--color-primary); color: var(--color-primary); }
-
-.company-main { max-width: 880px; margin: 0 auto; padding: 40px 24px 60px; }
 .company-title { font-family: var(--font-heading); font-weight: 800; font-size: 1.5rem; color: var(--color-primary); margin: 0 0 6px; }
 .company-subtitle { font-size: 0.85rem; color: var(--color-text-secondary); margin: 0 0 28px; line-height: 1.6; }
 
@@ -789,7 +843,7 @@ export default {
 
 .info-grid { display: flex; flex-direction: column; gap: 10px; }
 .info-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.85rem; }
-.info-label { color: var(--color-text-muted); font-size: 0.78rem; }
+.info-label { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-muted); font-size: 0.78rem; }
 
 .empty-hint { font-size: 0.83rem; color: var(--color-text-muted); font-style: italic; margin: 0; }
 .address-text { font-size: 0.87rem; color: var(--color-text); margin: 0; line-height: 1.55; }
@@ -807,9 +861,42 @@ export default {
   outline: none; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s;
 }
 .field-control:focus { border-color: var(--color-accent) !important; box-shadow: 0 0 0 3px rgba(26, 204, 141, 0.18) !important; }
+.field-control:disabled { background: var(--color-hover-bg) !important; color: var(--color-text-secondary) !important; cursor: not-allowed; }
+
+.locked-hint {
+  display: flex; align-items: center; gap: 6px;
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;
+  font-size: 0.78rem; color: var(--color-text-secondary);
+}
+.locked-hint i { color: var(--color-primary); }
+.unlock-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--color-primary); font-weight: 700; text-decoration: underline;
+  font-size: 0.78rem;
+}
 
 .fields-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 16px; }
 .fields-grid .field { margin-bottom: 0; }
+
+.fields-grid-head {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-nav); font-size: 0.78rem; font-weight: 600; color: var(--color-text);
+  margin-bottom: -2px;
+}
+.info-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; border: none; padding: 0;
+  background: var(--color-hover-bg); color: var(--color-text-secondary);
+  cursor: pointer; font-size: 0.7rem; transition: background-color 0.15s, color 0.15s;
+}
+.info-btn:hover { background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); }
+
+.identifier-explain { display: flex; flex-direction: column; gap: 4px; }
+.identifier-explain-term { font-family: var(--font-heading); font-weight: 700; font-size: 0.88rem; color: var(--color-heading); margin: 12px 0 0; }
+.identifier-explain-term:first-child { margin-top: 0; }
+.identifier-explain-text { font-size: 0.84rem; color: var(--color-text-secondary); line-height: 1.6; margin: 0; }
+.identifier-explain-note { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--color-border); font-style: italic; }
 
 .search-wrap { position: relative; }
 .search-box {
@@ -817,7 +904,10 @@ export default {
   background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 10px;
   padding: 0.15rem 0.75rem; transition: border-color 0.15s, box-shadow 0.15s;
 }
-.search-box:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(26, 204, 141, 0.18); }
+/* Juste la bordure qui change de couleur — un anneau à bords nets
+   (box-shadow sans flou) se voyait comme un second rectangle imbriqué
+   plutôt qu'une lueur de focus. */
+.search-box:focus-within { border-color: var(--color-accent); }
 .search-icon { color: var(--color-text-muted); margin-right: 0.5rem; flex-shrink: 0; }
 .search-box input { flex: 1; border: none !important; outline: none; background: transparent !important; padding: 0.6rem 0 !important; font-size: 0.88rem; color: var(--color-text); }
 .search-spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--color-border); border-top-color: var(--color-accent); animation: companySpin 0.7s linear infinite; flex-shrink: 0; }

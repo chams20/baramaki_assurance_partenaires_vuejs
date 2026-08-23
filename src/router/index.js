@@ -6,21 +6,20 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
-      path: '/',
-      redirect: '/login',
-    },
-    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/security/LoginPage.vue'),
       meta: { title: 'BARAMAKI Partenaires | Connexion', requiresAuth: false },
     },
     {
-      path: '/tableau-de-bord',
-      name: 'dashboard',
-      component: () => import('@/views/dashboard/DashboardPage.vue'),
+      // Coquille commune (header + nav persistante) à tout l'espace
+      // partenaire authentifié — un seul endroit pour la largeur de
+      // conteneur et la navigation, voir PartnerLayout.vue. requiresAuth/
+      // roles posés ICI seulement : Vue Router fusionne le meta du parent
+      // dans `to.meta` pour chaque route enfant, pas besoin de les répéter.
+      path: '/',
+      component: () => import('@/components/layout/PartnerLayout.vue'),
       meta: {
-        title: 'BARAMAKI Partenaires | Tableau de bord',
         requiresAuth: true,
         // Espace réservé aux partenaires — jamais à un ROLE_CLIENT/ROLE_ADMIN
         // qui se connecterait ici par erreur (le compte peut très bien avoir
@@ -29,26 +28,42 @@ const router = createRouter({
         // c'est la présence de ROLE_PARTNER qui compte, pas l'absence des autres).
         roles: ['ROLE_PARTNER'],
       },
-    },
-    {
-      path: '/forfaits',
-      name: 'choose-plan',
-      component: () => import('@/views/dashboard/ChoosePlanPage.vue'),
-      meta: {
-        title: 'BARAMAKI Partenaires | Forfaits',
-        requiresAuth: true,
-        roles: ['ROLE_PARTNER'],
-      },
-    },
-    {
-      path: '/mon-entreprise',
-      name: 'my-company',
-      component: () => import('@/views/dashboard/MyCompanyPage.vue'),
-      meta: {
-        title: 'BARAMAKI Partenaires | Mon entreprise',
-        requiresAuth: true,
-        roles: ['ROLE_PARTNER'],
-      },
+      children: [
+        // "/" tout nu (route index) : un visiteur non authentifié y est de
+        // toute façon renvoyé vers /login par le guard requiresAuth
+        // ci-dessous avant même d'atteindre cette redirection.
+        { path: '', redirect: '/tableau-de-bord' },
+        {
+          path: 'tableau-de-bord',
+          name: 'dashboard',
+          component: () => import('@/views/dashboard/DashboardPage.vue'),
+          meta: { title: 'BARAMAKI Partenaires | Tableau de bord' },
+        },
+        {
+          path: 'cles-api',
+          name: 'api-keys',
+          component: () => import('@/views/dashboard/ApiKeysPage.vue'),
+          meta: { title: 'BARAMAKI Partenaires | Clés API' },
+        },
+        {
+          path: 'facturation',
+          name: 'billing',
+          component: () => import('@/views/dashboard/BillingPage.vue'),
+          meta: { title: 'BARAMAKI Partenaires | Facturation' },
+        },
+        {
+          path: 'forfaits',
+          name: 'choose-plan',
+          component: () => import('@/views/dashboard/ChoosePlanPage.vue'),
+          meta: { title: 'BARAMAKI Partenaires | Forfaits' },
+        },
+        {
+          path: 'mon-entreprise',
+          name: 'my-company',
+          component: () => import('@/views/dashboard/MyCompanyPage.vue'),
+          meta: { title: 'BARAMAKI Partenaires | Mon entreprise' },
+        },
+      ],
     },
     {
       path: '/acces-refuse',

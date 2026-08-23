@@ -16,6 +16,43 @@ export async function getMyClient() {
 }
 
 /**
+ * Agences BARAMAKI les plus proches d'une position — GET
+ * /api/geo/my-client/agencies/nearby. Coordonnées obtenues via la
+ * géolocalisation du navigateur (voir DashboardPage.vue), jamais saisies —
+ * "on prend ses coordonnées et on lui montre directement les agences
+ * proches" (demande explicite). Retourne au plus 5 agences, triées par
+ * distance croissante.
+ * @param {number} lat
+ * @param {number} lng
+ */
+export async function getNearbyAgenciesForMe(lat, lng) {
+  const { data } = await apiClient.get('/api/geo/my-client/agencies/nearby', { params: { lat, lng } })
+  return data.agencies
+}
+
+/**
+ * Télécharge une de ses propres factures au format PDF — GET
+ * /api/geo/my-client/invoices/{invoiceUuid}/pdf. Généré à la volée côté
+ * back (dompdf), récupéré en blob puis téléchargé nous-mêmes : la route
+ * passe par apiClient donc porte le Bearer token, contrairement à un simple
+ * lien <a href>.
+ * @param {string} invoiceUuid
+ */
+export async function downloadMyInvoicePdf(invoiceUuid) {
+  const response = await apiClient.get(`/api/geo/my-client/invoices/${invoiceUuid}/pdf`, {
+    responseType: 'blob',
+  })
+  const blobUrl = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+  const link = document.createElement('a')
+  link.href = blobUrl
+  link.download = `facture-baramaki-${invoiceUuid.slice(0, 8)}.pdf`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(blobUrl)
+}
+
+/**
  * Catalogue des forfaits actifs proposés — GET /api/geo/my-client/plans.
  */
 export async function listAvailablePlans() {
@@ -31,6 +68,40 @@ export async function listAvailablePlans() {
  */
 export async function subscribeToPlan(planPriceId) {
   const { data } = await apiClient.post('/api/geo/my-client/subscriptions', { planPriceId })
+  return data.client
+}
+
+/**
+ * Change de forfait (upgrade seulement — voir doc 12 §3) — POST
+ * /api/geo/my-client/subscriptions/upgrade. Le prorata du temps non utilisé
+ * sur l'abonnement actuel est calculé côté back, jamais ici.
+ * @param {string} planPriceId
+ */
+export async function upgradeSubscription(planPriceId) {
+  const { data } = await apiClient.post('/api/geo/my-client/subscriptions/upgrade', { planPriceId })
+  return data.client
+}
+
+/**
+ * Génère une nouvelle clé pour un de ses forfaits — POST
+ * /api/geo/my-client/keys. Un abonnement peut financer plusieurs clés, une
+ * par domaine (doc 09 §5) — subscriptionId et domain obligatoires. La valeur
+ * complète de la clé (`plainKey`) n'est renvoyée qu'ici, une seule fois.
+ * @param {{ subscriptionId: string, domain: string }} payload
+ * @returns {Promise<{ client: object, plainKey: string }>}
+ */
+export async function generateMyKey(payload) {
+  const { data } = await apiClient.post('/api/geo/my-client/keys', payload)
+  return { client: data.client, plainKey: data.plainKey }
+}
+
+/**
+ * Révoque une de ses propres clés — PATCH
+ * /api/geo/my-client/keys/{keyUuid}/revoke.
+ * @param {string} keyUuid
+ */
+export async function revokeMyKey(keyUuid) {
+  const { data } = await apiClient.patch(`/api/geo/my-client/keys/${keyUuid}/revoke`)
   return data.client
 }
 
