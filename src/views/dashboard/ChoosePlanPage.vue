@@ -92,8 +92,20 @@
                 <i class="bi" :class="f.included ? 'bi-check2' : 'bi-dash'"></i> {{ f.text }}
               </li>
             </ul>
+
+            <!-- Le meilleur tarif possible, tout en bas de la carte — demande
+                 explicite, pour que l'engagement long reste visible même si
+                 la période sélectionnée en haut de page est "Mensuel". -->
+            <p v-if="cheapestMonthlyEquivalent(p)" class="plan-from">
+              À partir de <strong>{{ formatAmount(cheapestMonthlyEquivalent(p).monthlyEq) }}/mois</strong>
+              équivalent sur {{ periodLabelLong(cheapestMonthlyEquivalent(p).period) }}
+            </p>
           </div>
         </div>
+
+        <button type="button" class="full-grid-btn" @click="showFullGridModal = true">
+          <i class="bi bi-table"></i> Voir la grille tarifaire complète
+        </button>
       </template>
 
       <!-- Vue dédiée à une offre — choix réel de la période + confirmation,
@@ -165,6 +177,54 @@
               <i class="bi" :class="f.included ? 'bi-check2' : 'bi-dash'"></i> {{ f.text }}
             </li>
           </ul>
+
+          <p v-if="cheapestMonthlyEquivalent(viewingPlan)" class="plan-from">
+            À partir de <strong>{{ formatAmount(cheapestMonthlyEquivalent(viewingPlan).monthlyEq) }}/mois</strong>
+            équivalent sur {{ periodLabelLong(cheapestMonthlyEquivalent(viewingPlan).period) }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Grille tarifaire complète — demande explicite : "un bouton qui va
+           ouvrir l'ensemble de la grille tarifaire". Respecte le même
+           displayCurrency (KMF/€) que le reste de la page. -->
+      <div v-if="showFullGridModal" class="modal-backdrop" @click.self="showFullGridModal = false">
+        <div class="modal-box modal-box--wide">
+          <div class="modal-head">
+            <h4 class="modal-title"><i class="bi bi-table"></i> Grille tarifaire complète</h4>
+            <button type="button" class="modal-close" @click="showFullGridModal = false"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <p class="modal-text">
+            Montant total pour toute la durée choisie, pas un prix mensuel à multiplier — la remise
+            grandit avec l'engagement.
+          </p>
+          <div class="grid-table-scroll">
+            <table class="grid-table">
+              <thead>
+                <tr>
+                  <th>Durée</th>
+                  <th v-for="p in plans" :key="p.uuid">{{ p.name }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="period in PERIODS" :key="period.value">
+                  <th scope="row">{{ period.label }}</th>
+                  <td v-for="p in plans" :key="p.uuid">
+                    <template v-if="priceFor(p, period.value)">
+                      <span class="grid-price-total">{{ formatAmount(priceFor(p, period.value).effectiveAmount) }}</span>
+                      <span v-if="period.value !== 'monthly'" class="grid-price-monthly">
+                        {{ formatAmount(Number(priceFor(p, period.value).effectiveAmount) / periodMonthsFor(period.value)) }}/mois éq.
+                      </span>
+                    </template>
+                    <span v-else class="grid-price-none">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-ghost" @click="showFullGridModal = false">Fermer</button>
+          </div>
         </div>
       </div>
   </div>
@@ -193,6 +253,12 @@ const DEFAULT_PERIOD_PRIORITY = ['yearly', 'monthly', 'two_years', 'four_years']
 // que reconvertir ce qui est déjà là pour un client qui ne connaît pas
 // encore le KMF — même taux que la saisie côté admin (GeoPlansPage.vue).
 const KMF_PER_EUR = 491.96775
+
+// Pour calculer "à partir de X/mois équivalent sur Y" — le nombre de mois
+// que couvre chaque durée, jamais une approximation (les mois n'ont pas
+// tous 30 jours, mais ici c'est juste ce dénominateur qui compte).
+const PERIOD_MONTHS = { monthly: 1, yearly: 12, two_years: 24, four_years: 48 }
+const PERIOD_LABELS_LONG = { monthly: '1 mois', yearly: '12 mois', two_years: '24 mois', four_years: '48 mois' }
 
 // Un forfait créé avant l'ajout de "included" a encore features comme un
 // simple tableau de chaînes — normalisé à la lecture pour ne jamais
@@ -223,6 +289,9 @@ export default {
       detailPeriod: 'yearly',
       subscribingUuid: null,
       subscribeError: null,
+      // Grille tarifaire complète (4 durées × tous les forfaits) — demande
+      // explicite, en plus des cartes déjà là.
+      showFullGridModal: false,
     }
   },
   computed: {
@@ -247,6 +316,25 @@ export default {
     },
     periodSuffixFor(period) {
       return { monthly: ' / mois', yearly: ' / 12 mois', two_years: ' / 24 mois', four_years: ' / 48 mois' }[period] || ''
+    },
+    periodLabelLong(period) {
+      return PERIOD_LABELS_LONG[period] || ''
+    },
+    periodMonthsFor(period) {
+      return PERIOD_MONTHS[period] || 1
+    },
+    // Le meilleur tarif mensuel équivalent, toutes durées confondues — quasi
+    // toujours 48 mois (le plus dégressif), mais calculé plutôt que supposé
+    // au cas où un forfait n'a pas encore de prix sur cette durée.
+    cheapestMonthlyEquivalent(plan) {
+      let best = null
+      for (const price of plan.prices) {
+        const months = PERIOD_MONTHS[price.billingPeriod]
+        if (!months) continue
+        const monthlyEq = Number(price.effectiveAmount) / months
+        if (!best || monthlyEq < best.monthlyEq) best = { monthlyEq, period: price.billingPeriod }
+      }
+      return best
     },
     // Upgrade seulement (doc 12 §3) : sort_order sert déjà à classer les
     // forfaits par gamme côté admin, réutilisé ici plutôt qu'un second champ.
@@ -510,4 +598,57 @@ export default {
 .plan-detail-cta { margin-bottom: 0; }
 
 .plan-detail-features { padding-top: 24px; margin-top: 24px; }
+
+/* ── "À partir de X/mois équivalent sur..." — tout en bas de la carte ──  */
+.plan-from {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px dashed var(--color-border);
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.plan-from strong { color: var(--color-accent-dark); font-weight: 800; }
+.plan-card--highlighted .plan-from { border-top-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.65); }
+.plan-card--highlighted .plan-from strong { color: var(--color-accent); }
+
+/* ── Bouton grille tarifaire complète ──  */
+.full-grid-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 28px auto 0; padding: 10px 22px;
+  background: none; border: 1.5px solid var(--color-border); border-radius: 999px;
+  color: var(--color-text-secondary); font-family: var(--font-nav); font-weight: 600; font-size: 0.84rem;
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.full-grid-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+/* ── Modale grille tarifaire ──  */
+.modal-backdrop {
+  position: fixed; inset: 0; background: var(--color-backdrop);
+  display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 20px;
+}
+.modal-box { background: var(--color-surface); border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2); }
+.modal-box--wide { max-width: 720px; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
+.modal-title { display: flex; align-items: center; gap: 8px; font-family: var(--font-heading); font-weight: 700; font-size: 1rem; color: var(--color-heading); margin: 0; }
+.modal-close { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 1rem; flex-shrink: 0; }
+.modal-text { margin: 0 0 16px; font-size: 0.83rem; color: var(--color-text-secondary); line-height: 1.55; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+.btn-ghost {
+  background: none; border: 1.5px solid var(--color-border); border-radius: 8px;
+  padding: 8px 16px; font-family: var(--font-nav); font-weight: 600; font-size: 0.82rem;
+  color: var(--color-text-secondary); cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.btn-ghost:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+.grid-table-scroll { overflow-x: auto; }
+.grid-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 480px; }
+.grid-table th, .grid-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.grid-table thead th { font-family: var(--font-heading); font-weight: 700; font-size: 0.78rem; color: var(--color-primary); background: var(--color-hover-bg); white-space: nowrap; }
+.grid-table tbody th { font-weight: 700; color: var(--color-heading); white-space: nowrap; }
+.grid-table tbody tr:last-child th, .grid-table tbody tr:last-child td { border-bottom: none; }
+.grid-price-total { display: block; font-weight: 700; color: var(--color-heading); }
+.grid-price-monthly { display: block; font-size: 0.72rem; color: var(--color-text-secondary); margin-top: 1px; }
+.grid-price-none { color: var(--color-text-muted); font-style: italic; }
 </style>

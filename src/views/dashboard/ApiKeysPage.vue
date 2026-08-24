@@ -69,27 +69,107 @@
       </p>
 
       <ul v-if="keys.length" class="key-list">
-        <li v-for="k in keys" :key="k.uuid" class="key-row">
-          <div class="key-row-main">
-            <span class="key-row-prefix">{{ k.keyPrefix }}…</span>
-            <span class="key-row-date">{{ k.planName || 'Forfait' }} · {{ k.domain }}</span>
+        <li v-for="k in keys" :key="k.uuid" class="key-item">
+          <div class="key-row">
+            <div class="key-row-main">
+              <span class="key-row-prefix">{{ k.keyPrefix }}…</span>
+              <span class="key-row-date">{{ k.planName || 'Forfait' }} · {{ k.domain }}</span>
+              <div class="key-row-stats">
+                <span class="key-row-stat"><strong>{{ Number(k.requestsThisMonth || 0).toLocaleString('fr-FR') }}</strong> appel(s) ce mois-ci</span>
+                <span v-if="k.avgResponseTimeMs !== null" class="key-row-stat"><strong>{{ k.avgResponseTimeMs }}</strong> ms en moyenne</span>
+              </div>
+            </div>
+            <div class="key-row-side">
+              <span class="invoice-status" :class="k.isRevoked ? 'invoice-status--failed' : 'invoice-status--paid'">
+                {{ k.isRevoked ? 'Révoquée' : 'Active' }}
+              </span>
+              <button v-if="!k.isRevoked" type="button" class="key-test-btn" @click="toggleTestPanel(k)">
+                <i class="bi" :class="testingKeyUuid === k.uuid ? 'bi-chevron-up' : 'bi-play-circle'"></i>
+                {{ testingKeyUuid === k.uuid ? 'Fermer' : 'Tester' }}
+              </button>
+              <button v-if="!k.isRevoked" type="button" class="key-revoke-btn" @click="handleRevokeKey(k)">Révoquer</button>
+            </div>
           </div>
-          <div class="key-row-side">
-            <span class="invoice-status" :class="k.isRevoked ? 'invoice-status--failed' : 'invoice-status--paid'">
-              {{ k.isRevoked ? 'Révoquée' : 'Active' }}
-            </span>
-            <button v-if="!k.isRevoked" type="button" class="key-revoke-btn" @click="handleRevokeKey(k)">Révoquer</button>
+
+          <!-- Testeur "en direct" — demande explicite : une vraie clé, un
+               vrai appel, la vraie réponse. Ne fait jamais un fetch() brut
+               depuis ce portail (voir handleTestKey) : notre propre domaine
+               n'est jamais celui enregistré sur la clé, un vrai appel
+               échouerait toujours au contrôle de domaine. -->
+          <div v-if="testingKeyUuid === k.uuid" class="key-test-panel">
+            <p class="key-test-hint">
+              Simule un vrai appel à <code>GET /api/geo/suggest?q=...</code> avec cette clé — compte dans
+              votre quota mensuel comme n'importe quel appel réel.
+            </p>
+            <form class="key-test-form" @submit.prevent="handleTestKey(k)">
+              <input
+                v-model="testQuery"
+                type="text"
+                class="key-gen-input"
+                placeholder="Ex. fomboni"
+                :disabled="testLoading"
+              />
+              <button type="submit" class="btn-primary" :disabled="testLoading || !testQuery.trim()">
+                {{ testLoading ? 'Test en cours...' : 'Envoyer' }}
+              </button>
+            </form>
+            <p v-if="testError" class="key-gen-error">{{ testError }}</p>
+            <template v-if="testResult">
+              <p class="key-test-count">
+                {{ testResult.results.length }} résultat(s) pour «&nbsp;{{ testResult.query }}&nbsp;»
+              </p>
+              <pre class="key-usage-code">{{ JSON.stringify(testResult, null, 2) }}</pre>
+            </template>
           </div>
         </li>
       </ul>
 
       <div v-if="keys.length" class="key-usage">
-        <p class="key-usage-title">Comment l'utiliser</p>
+        <p class="key-usage-title">Comment l'intégrer dans votre application</p>
         <p class="key-usage-text">
-          Envoyez la clé dans l'en-tête <code>X-Api-Key</code> de vos appels à l'API d'adressage BARAMAKI :
+          La procédure complète pour utiliser votre clé dans votre propre code — même sans être passé par
+          le testeur ci-dessus. Envoyez-la dans l'en-tête <code>X-Api-Key</code> de chaque appel.
         </p>
-        <pre class="key-usage-code">X-Api-Key: bmk_live_...
-GET {{ apiBaseUrl }}/api/geo/suggest?q=...</pre>
+
+        <p class="key-usage-label">Exemple — JavaScript, depuis votre site</p>
+        <pre class="key-usage-code">const response = await fetch(
+  '{{ apiBaseUrl }}/api/geo/suggest?q=' + encodeURIComponent(query),
+  { headers: { 'X-Api-Key': 'bmk_live_...' } }
+)
+const data = await response.json()
+
+if (data.status === 'success') {
+  data.results.forEach((result) => {
+    console.log(result.name, result.chain, result.coordinates)
+  })
+}</pre>
+
+        <p class="key-usage-label">Exemple — ligne de commande (cURL, pour tester rapidement)</p>
+        <pre class="key-usage-code">curl "{{ apiBaseUrl }}/api/geo/suggest?q=fomboni" \
+  -H "X-Api-Key: bmk_live_..." \
+  -H "Origin: https://votre-domaine.km"</pre>
+        <p class="key-usage-text">
+          L'en-tête <code>Origin</code> est obligatoire ici — un navigateur l'envoie automatiquement à
+          chaque appel (c'est pour ça que l'exemple JavaScript n'a rien à faire de spécial), mais
+          <code>curl</code> ne l'envoie jamais tout seul, il faut le préciser à la main.
+        </p>
+        <p class="key-usage-text">
+          Chaque clé est restreinte au domaine indiqué à sa création — l'appel doit venir de <strong>ce
+          domaine précis</strong> (comme une clé Google Maps restreinte par référent HTTP). Un appel sans
+          <code>Origin</code>/<code>Referer</code> ou depuis un autre domaine sera refusé.
+        </p>
+        <table class="key-usage-errors">
+          <tbody>
+            <tr>
+              <td><span class="key-usage-code-inline key-usage-code-inline--err">401</span></td>
+              <td>Clé absente/invalide/révoquée/expirée, forfait inactif, ou domaine incorrect.</td>
+            </tr>
+            <tr>
+              <td><span class="key-usage-code-inline key-usage-code-inline--warn">429</span></td>
+              <td>Quota mensuel du forfait dépassé.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </template>
   </div>
@@ -97,7 +177,7 @@ GET {{ apiBaseUrl }}/api/geo/suggest?q=...</pre>
 
 <script>
 import { useToast } from 'vue-toastification'
-import { getMyClient, generateMyKey, revokeMyKey } from '@/services/geo/geoSelfServiceService'
+import { getMyClient, generateMyKey, revokeMyKey, testMyKey } from '@/services/geo/geoSelfServiceService'
 
 export default {
   name: 'ApiKeysPage',
@@ -113,6 +193,11 @@ export default {
       generatingKey: false,
       revealedKey: null,
       keyCopied: false,
+      testingKeyUuid: null,
+      testQuery: '',
+      testLoading: false,
+      testError: null,
+      testResult: null,
     }
   },
   computed: {
@@ -178,6 +263,31 @@ export default {
         this.toast.success('Clé révoquée.')
       } catch (err) {
         this.toast.error(err.response?.data?.message || 'Erreur lors de la révocation.')
+      }
+    },
+    toggleTestPanel(key) {
+      if (this.testingKeyUuid === key.uuid) {
+        this.testingKeyUuid = null
+        return
+      }
+      this.testingKeyUuid = key.uuid
+      this.testQuery = ''
+      this.testError = null
+      this.testResult = null
+    },
+    async handleTestKey(key) {
+      this.testLoading = true
+      this.testError = null
+      this.testResult = null
+      try {
+        this.testResult = await testMyKey(key.uuid, this.testQuery.trim())
+        // Un appel de test compte pour de vrai dans le quota (voir back) —
+        // on rafraîchit pour que "appels ce mois-ci" reste exact tout de suite.
+        this.myClient = await getMyClient()
+      } catch (err) {
+        this.testError = err.response?.data?.message || 'Erreur lors du test.'
+      } finally {
+        this.testLoading = false
       }
     },
   },
@@ -428,17 +538,28 @@ export default {
   box-shadow: 0 2px 14px rgba(4, 6, 119, 0.05);
 }
 
+.key-item {
+  padding: 14px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.key-item:first-child {
+  border-top: none;
+}
+
 .key-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 0;
-  border-top: 1px solid var(--color-border);
+  padding: 8px 10px;
+  margin: -8px -10px;
+  border-radius: 10px;
+  transition: background-color 0.15s ease;
 }
 
-.key-row:first-child {
-  border-top: none;
+.key-row:hover {
+  background: var(--color-hover-bg);
 }
 
 .key-row-main {
@@ -457,6 +578,25 @@ export default {
 .key-row-date {
   font-size: 0.76rem;
   color: var(--color-text-secondary);
+}
+
+.key-row-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.key-row-stat {
+  font-size: 0.76rem;
+  color: var(--color-text-secondary);
+}
+
+.key-row-stat strong {
+  color: var(--color-accent-dark);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .key-row-side {
@@ -491,6 +631,73 @@ export default {
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.key-revoke-btn:hover {
+  background: var(--color-danger-dark);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.key-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid var(--color-accent-dark);
+  color: var(--color-accent-dark);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.key-test-btn:hover {
+  background: var(--color-accent-dark);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.key-test-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--color-hover-bg);
+  border-radius: 12px;
+}
+
+.key-test-hint {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.key-test-hint code {
+  background: var(--color-surface);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'Courier New', monospace;
+}
+
+.key-test-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.key-test-form .key-gen-input {
+  flex: 1;
+  background: var(--color-surface);
+}
+
+.key-test-count {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 0 0 6px;
 }
 
 .key-usage {
@@ -522,6 +729,15 @@ export default {
   font-family: 'Courier New', monospace;
 }
 
+.key-usage-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 14px 0 6px;
+}
+
 .key-usage-code {
   background: var(--color-hover-bg);
   border-radius: 8px;
@@ -532,5 +748,51 @@ export default {
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
+}
+
+.key-usage-code + .key-usage-text {
+  margin-top: 14px;
+}
+
+.key-usage-errors {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.key-usage-errors td {
+  padding: 6px 0;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  vertical-align: top;
+}
+
+.key-usage-errors tr:first-child td {
+  border-top: none;
+}
+
+.key-usage-errors td:first-child {
+  width: 60px;
+  white-space: nowrap;
+}
+
+.key-usage-code-inline {
+  display: inline-block;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  font-size: 0.76rem;
+  padding: 1px 7px;
+  border-radius: 5px;
+}
+
+.key-usage-code-inline--err {
+  color: var(--color-danger-dark);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+.key-usage-code-inline--warn {
+  color: #b45309;
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
 }
 </style>

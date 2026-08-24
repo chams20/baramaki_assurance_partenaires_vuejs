@@ -106,6 +106,24 @@ export async function revokeMyKey(keyUuid) {
 }
 
 /**
+ * "Tester ma clé" — POST /api/geo/my-client/keys/{keyUuid}/test. Ne fait PAS
+ * un vrai appel HTTP à /api/geo/suggest avec X-Api-Key (l'Origin de ce
+ * portail n'est jamais le domaine enregistré sur la clé, ça échouerait
+ * systématiquement au contrôle de domaine côté back) — endpoint dédié,
+ * protégé par la connexion JWT habituelle, qui appelle directement le même
+ * calcul de suggestion. Compte pour de vrai dans le quota mensuel (décidé
+ * explicitement, voir docs/refonte-backend/09-api-adressage-partenaires.md
+ * §5) : peut renvoyer 429 si le quota du forfait est déjà atteint.
+ * @param {string} keyUuid
+ * @param {string} q
+ * @returns {Promise<{status: string, query: string, results: object[]}>}
+ */
+export async function testMyKey(keyUuid, q) {
+  const { data } = await apiClient.post(`/api/geo/my-client/keys/${keyUuid}/test`, { q })
+  return data
+}
+
+/**
  * Modifie la fiche entreprise du partenaire connecté — nom, téléphone de
  * l'entreprise, adresse du siège — PATCH /api/geo/my-client.
  * @param {object} payload
