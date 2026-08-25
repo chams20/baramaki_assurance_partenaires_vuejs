@@ -1,6 +1,57 @@
 <template>
   <div class="plans-page">
     <template v-if="!viewingPlan">
+        <div v-if="pastSubscriptions.length" class="tabs-pills">
+          <button type="button" class="tab-pill" :class="{ 'tab-pill--on': activeTab === 'available' }" @click="activeTab = 'available'">
+            Forfaits disponibles
+          </button>
+          <button type="button" class="tab-pill" :class="{ 'tab-pill--on': activeTab === 'past' }" @click="activeTab = 'past'">
+            Mes forfaits passés
+          </button>
+        </div>
+
+      <template v-if="activeTab === 'past'">
+        <h1 class="plans-title">Mes forfaits passés</h1>
+        <p class="plans-subtitle">Historique de vos abonnements résiliés, expirés ou remplacés — dates,
+          montants payés et durée d'utilisation réelle.</p>
+
+        <div class="past-subs-list">
+          <div v-for="s in pastSubscriptions" :key="s.uuid" class="past-sub-card">
+            <div class="past-sub-head">
+              <h3>{{ s.planName }}</h3>
+              <span class="past-status-chip" :class="`past-status-chip--${s.status}`">{{ pastStatusLabel(s.status) }}</span>
+            </div>
+            <dl class="past-sub-grid">
+              <div>
+                <dt>Souscrit le</dt>
+                <dd>{{ formatDate(s.startedAt) }}</dd>
+              </div>
+              <div>
+                <dt>Payé le</dt>
+                <dd>{{ formatDate(s.activatedAt) }}</dd>
+              </div>
+              <div>
+                <dt>{{ s.status === 'upgraded' ? 'Remplacé le' : 'Résilié/expiré le' }}</dt>
+                <dd>{{ formatDate(s.endedAt) }}</dd>
+              </div>
+              <div>
+                <dt>Montant payé</dt>
+                <dd>{{ Number(s.amountPaid).toLocaleString('fr-FR') }} KMF</dd>
+              </div>
+              <div>
+                <dt>Jours utilisés</dt>
+                <dd>{{ daysUsed(s) }}</dd>
+              </div>
+            </dl>
+            <p v-if="s.status === 'cancelled' && s.activatedAt" class="past-sub-refund" :class="s.refundEligible ? 'past-sub-refund--ok' : 'past-sub-refund--no'">
+              <i class="bi" :class="s.refundEligible ? 'bi-check-circle' : 'bi-info-circle'"></i>
+              {{ s.refundEligible ? 'Résilié dans le délai — remboursement intégral.' : 'Résilié hors délai — aucun remboursement.' }}
+            </p>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
         <h1 class="plans-title">Choisissez votre forfait</h1>
         <p class="plans-subtitle">Le prix affiché est figé au moment de la souscription — il ne change plus
           ensuite, même si une réduction en cours se termine ou que le tarif catalogue évolue.</p>
@@ -107,10 +158,11 @@
           <i class="bi bi-table"></i> Voir la grille tarifaire complète
         </button>
       </template>
+    </template>
 
-      <!-- Vue dédiée à une offre — choix réel de la période + confirmation,
-           façon page produit Hostinger plutôt qu'un simple modal. -->
-      <div v-else class="plan-detail">
+    <!-- Vue dédiée à une offre — choix réel de la période + confirmation,
+         façon page produit Hostinger plutôt qu'un simple modal. -->
+    <div v-else class="plan-detail">
         <button type="button" class="plan-detail-back" @click="closePlanDetail">
           <i class="bi bi-arrow-left"></i> Retour aux forfaits
         </button>
@@ -158,12 +210,29 @@
               termine ou que le tarif catalogue évolue.
             </p>
 
+            <div v-if="!isCurrentPlan(viewingPlan)" class="plan-terms">
+              <details class="plan-terms-details">
+                <summary>Conditions de souscription</summary>
+                <ul>
+                  <li>Le tarif affiché est figé au moment de la souscription — il ne change plus ensuite.</li>
+                  <li>Vous pouvez résilier votre abonnement à tout moment depuis votre tableau de bord.</li>
+                  <li>Si vous résiliez dans les <strong>20 jours</strong> suivant l'activation (votre premier paiement validé), vous êtes remboursé intégralement.</li>
+                  <li>Passé ce délai de 20 jours, aucun remboursement n'est possible.</li>
+                  <li>La résiliation révoque immédiatement les clés API financées par cet abonnement.</li>
+                </ul>
+              </details>
+              <label class="plan-terms-check">
+                <input type="checkbox" v-model="termsAccepted" />
+                J'ai lu et j'accepte ces conditions.
+              </label>
+            </div>
+
             <div v-if="subscribeError" class="plans-alert">{{ subscribeError }}</div>
 
             <button
               type="button"
               class="plan-btn plan-btn--filled plan-detail-cta"
-              :disabled="isCurrentPlan(viewingPlan) || !!subscribingUuid"
+              :disabled="isCurrentPlan(viewingPlan) || !!subscribingUuid || !termsAccepted"
               @click="confirmSubscribe(viewingPlan)"
             >
               {{ ctaLabel(viewingPlan) }}
@@ -289,9 +358,19 @@ export default {
       detailPeriod: 'yearly',
       subscribingUuid: null,
       subscribeError: null,
+      // Gate contractuelle — demande explicite : "un genre de contrat où il
+      // lit et il accepte" avant que la souscription ne parte (doc 15).
+      // Réinitialisé à chaque ouverture d'offre pour ne jamais présélectionner
+      // l'acceptation d'un contrat qui n'a pas été relu pour CE forfait.
+      termsAccepted: false,
       // Grille tarifaire complète (4 durées × tous les forfaits) — demande
       // explicite, en plus des cartes déjà là.
       showFullGridModal: false,
+      // Onglet "Mes forfaits passés" — demande explicite : garder l'accès à
+      // l'historique (dates, montant payé, jours utilisés) même après une
+      // résiliation, quand le partenaire perd la vue "abonnement en cours"
+      // du tableau de bord (doc 15).
+      activeTab: 'available',
     }
   },
   computed: {
@@ -303,8 +382,37 @@ export default {
     currentSubscription() {
       return (this.myClient?.subscriptions || []).find((s) => s.status === 'active' || s.status === 'pending') || null
     },
+    // Tout ce qui n'est plus "en cours" — résilié, expiré, remplacé par un
+    // upgrade, ou jamais activé faute de paiement. Trié du plus récent au
+    // plus ancien (même tri que les autres listes de cette page).
+    pastSubscriptions() {
+      return (this.myClient?.subscriptions || [])
+        .filter((s) => !['active', 'pending'].includes(s.status))
+        .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+    },
   },
   methods: {
+    formatDate(iso) {
+      if (!iso) return '—'
+      return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso))
+    },
+    pastStatusLabel(status) {
+      return {
+        cancelled: 'Résilié',
+        expired: 'Expiré',
+        upgraded: 'Remplacé (changement de forfait)',
+        never_activated: 'Jamais activé',
+      }[status] || status
+    },
+    // Consommation réelle entre le premier paiement et la fin d'accès — null
+    // (affiché "—") tant que l'une des deux dates manque, notamment pour
+    // tout l'historique antérieur à cette fonctionnalité (voir migration
+    // Version20260825140000, ended_at jamais reconstitué rétroactivement).
+    daysUsed(subscription) {
+      if (!subscription.activatedAt || !subscription.endedAt) return '—'
+      const days = Math.round((new Date(subscription.endedAt) - new Date(subscription.activatedAt)) / 86400000)
+      return `${days} jour${days > 1 ? 's' : ''}`
+    },
     priceFor(plan, period) {
       return plan.prices.find((p) => p.billingPeriod === period) || null
     },
@@ -378,6 +486,7 @@ export default {
       this.viewingPlan = plan
       this.detailPeriod = this.priceFor(plan, this.selectedPeriod) ? this.selectedPeriod : this.defaultPeriodFor(plan)
       this.subscribeError = null
+      this.termsAccepted = false
     },
     closePlanDetail() {
       this.viewingPlan = null
@@ -417,6 +526,43 @@ export default {
 <style scoped>
 .plans-title { font-family: var(--font-heading); font-weight: 800; font-size: 1.6rem; color: var(--color-primary); margin: 0 0 8px; text-align: center; }
 .plans-subtitle { font-size: 0.85rem; color: var(--color-text-secondary); text-align: center; max-width: 560px; margin: 0 auto 24px; line-height: 1.6; }
+
+.tabs-pills { display: flex; justify-content: center; gap: 8px; margin-bottom: 28px; }
+.tab-pill {
+  padding: 9px 20px; border-radius: 999px; border: 1.5px solid var(--color-border);
+  background: var(--color-surface); color: var(--color-text-secondary);
+  font-family: var(--font-nav); font-size: 0.84rem; font-weight: 700; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.tab-pill--on { border-color: var(--color-primary); color: #fff; background: var(--color-primary); }
+
+.past-subs-list { display: flex; flex-direction: column; gap: 14px; max-width: 680px; margin: 0 auto; }
+.past-sub-card {
+  background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 14px;
+  padding: 18px 22px;
+}
+.past-sub-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.past-sub-head h3 { font-family: var(--font-heading); font-weight: 800; font-size: 1rem; color: var(--color-heading); margin: 0; }
+
+.past-status-chip {
+  display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; flex-shrink: 0; white-space: nowrap;
+  background: var(--color-hover-bg); color: var(--color-text-secondary);
+}
+.past-status-chip--cancelled { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger-dark); }
+.past-status-chip--expired { background: color-mix(in srgb, var(--color-text-muted) 18%, transparent); color: var(--color-text-secondary); }
+.past-status-chip--upgraded { background: color-mix(in srgb, var(--color-accent) 15%, transparent); color: var(--color-accent-dark); }
+
+.past-sub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 0; }
+.past-sub-grid dt { font-size: 0.72rem; color: var(--color-text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 3px; }
+.past-sub-grid dd { font-size: 0.88rem; color: var(--color-text); font-weight: 700; margin: 0; }
+
+.past-sub-refund {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding-top: 14px;
+  border-top: 1px dashed var(--color-border); font-size: 0.8rem; line-height: 1.5;
+}
+.past-sub-refund--ok { color: var(--color-accent-dark); }
+.past-sub-refund--no { color: var(--color-text-secondary); }
 
 .period-pills { display: flex; justify-content: center; gap: 8px; margin-bottom: 32px; }
 .period-pill {
@@ -594,6 +740,22 @@ export default {
 
 .plan-detail-hint { font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0 0 18px; }
 .plan-card--highlighted .plan-detail-hint { color: rgba(255, 255, 255, 0.6); }
+
+.plan-terms { margin-bottom: 18px; }
+.plan-terms-details {
+  font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.6;
+  border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px;
+}
+.plan-card--highlighted .plan-terms-details { border-color: rgba(255, 255, 255, 0.2); color: rgba(255, 255, 255, 0.75); }
+.plan-terms-details summary { cursor: pointer; font-weight: 700; color: var(--color-text); }
+.plan-card--highlighted .plan-terms-details summary { color: #fff; }
+.plan-terms-details ul { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.plan-terms-check {
+  display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+  font-size: 0.82rem; color: var(--color-text); line-height: 1.5;
+}
+.plan-card--highlighted .plan-terms-check { color: rgba(255, 255, 255, 0.85); }
+.plan-terms-check input { margin-top: 3px; flex-shrink: 0; cursor: pointer; }
 
 .plan-detail-cta { margin-bottom: 0; }
 

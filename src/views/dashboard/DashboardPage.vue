@@ -6,7 +6,7 @@
     </div>
 
     <div v-if="loading" class="placeholder-card">
-      <p class="placeholder-text">Chargement...</p>
+      <div class="placeholder-spinner"></div>
     </div>
 
     <template v-else>
@@ -52,6 +52,9 @@
               <i class="bi bi-arrow-up-circle"></i> Passer à un forfait supérieur
             </router-link>
             <router-link to="/forfaits" class="subscription-link subscription-link--ghost">Voir tous les forfaits</router-link>
+            <button type="button" class="subscription-link subscription-link--danger" @click="showCancelModal = true">
+              <i class="bi bi-x-circle"></i> Résilier
+            </button>
           </div>
         </section>
 
@@ -172,13 +175,47 @@
           <i class="bi bi-chevron-right quick-row-arrow"></i>
         </router-link>
       </section>
+
+      <!-- Confirmation de résiliation — annonce le remboursement AVANT de
+           confirmer (calculé côté front sur activatedAt, même règle que
+           GeoApiSubscription::wasCancelledWithinRefundWindow() côté back,
+           qui reste la source de vérité une fois l'action envoyée). -->
+      <div v-if="showCancelModal" class="modal-backdrop" @click.self="showCancelModal = false">
+        <div class="modal-box">
+          <div class="modal-head">
+            <h4 class="modal-title"><i class="bi bi-x-circle"></i> Résilier mon abonnement</h4>
+            <button type="button" class="modal-close" @click="showCancelModal = false"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <p class="modal-text">
+            Vous pouvez résilier <strong>{{ currentSubscription?.planName }}</strong> à tout moment. Vos clés API
+            financées par cet abonnement seront immédiatement révoquées.
+          </p>
+          <p class="modal-text modal-text-icon" :class="cancelRefundPreview.eligible ? 'modal-text--good' : 'modal-text--warn'">
+            <i class="bi" :class="cancelRefundPreview.eligible ? 'bi-check-circle' : 'bi-info-circle'"></i>
+            {{ cancelRefundPreview.message }}
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="btn-ghost" @click="showCancelModal = false">Annuler</button>
+            <button type="button" class="btn-danger" :disabled="cancelling" @click="confirmCancelSubscription">
+              {{ cancelling ? 'Résiliation...' : 'Confirmer la résiliation' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <script>
+import { useToast } from 'vue-toastification'
 import authStore from '@/services/auth/authStore'
-import { getMyClient, getNearbyAgenciesForMe } from '@/services/geo/geoSelfServiceService'
+import { getMyClient, getNearbyAgenciesForMe, cancelMySubscription } from '@/services/geo/geoSelfServiceService'
+
+// Même délai que GeoApiSubscription::CANCELLATION_REFUND_WINDOW_DAYS côté
+// back — sert uniquement à prévisualiser l'éligibilité au remboursement
+// AVANT de confirmer (voir cancelRefundPreview()) ; le back reste la seule
+// source de vérité, recalculée à l'instant réel de la résiliation.
+const CANCELLATION_REFUND_WINDOW_DAYS = 20
 
 // ECharts en tree-shaking (voir front/baramaki_assurance_admin_vuejs/docs/
 // recette-dashboard.md §3) — seul le nécessaire (barres + donut) est
@@ -216,12 +253,15 @@ export default {
   name: 'DashboardPage',
   data() {
     return {
+      toast: useToast(),
       loading: true,
       myClient: null,
       nearbyAgencies: [],
       loadingNearbyAgencies: false,
       nearbyAgenciesError: null,
       chartResizeObserver: null,
+      showCancelModal: false,
+      cancelling: false,
     }
   },
   computed: {
@@ -235,6 +275,25 @@ export default {
     // (voir GeoApiSubscription::STATUS_PENDING côté back).
     currentSubscription() {
       return (this.myClient?.subscriptions || []).find((s) => s.status === 'active' || s.status === 'pending') || null
+    },
+    // Aperçu avant confirmation — même règle que
+    // GeoApiSubscription::wasCancelledWithinRefundWindow() côté back, calculé
+    // ici seulement pour informer le partenaire avant qu'il ne confirme (le
+    // back reste seul juge au moment réel de la résiliation).
+    cancelRefundPreview() {
+      const activatedAt = this.currentSubscription?.activatedAt
+      if (!activatedAt) {
+        return { eligible: false, message: "Aucun paiement n'a encore été validé pour cet abonnement — rien à rembourser." }
+      }
+      const deadline = new Date(activatedAt)
+      deadline.setDate(deadline.getDate() + CANCELLATION_REFUND_WINDOW_DAYS)
+      const eligible = new Date() <= deadline
+      return {
+        eligible,
+        message: eligible
+          ? `Vous êtes dans le délai de ${CANCELLATION_REFUND_WINDOW_DAYS} jours — vous serez remboursé intégralement.`
+          : `Le délai de ${CANCELLATION_REFUND_WINDOW_DAYS} jours pour un remboursement est dépassé — aucun remboursement ne sera possible.`,
+      }
     },
     invoices() {
       return this.myClient?.invoices || []
@@ -346,6 +405,20 @@ export default {
     eurEquivalent(amountKmf) {
       const eur = Number(amountKmf) / KMF_PER_EUR
       return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(eur)
+    },
+    async confirmCancelSubscription() {
+      if (!this.currentSubscription) return
+      this.cancelling = true
+      try {
+        const { client, refundEligible } = await cancelMySubscription(this.currentSubscription.uuid)
+        this.myClient = client
+        this.showCancelModal = false
+        this.toast.success(refundEligible ? 'Abonnement résilié — remboursement à venir, contactez BARAMAKI si besoin.' : 'Abonnement résilié.')
+      } catch (err) {
+        this.toast.error(err.response?.data?.message || 'Erreur lors de la résiliation.')
+      } finally {
+        this.cancelling = false
+      }
     },
     formatShortDate(isoDate) {
       // isoDate est un simple "Y-m-d" (pas d'heure) — voir
@@ -596,6 +669,13 @@ export default {
   box-shadow: 0 4px 24px rgba(4, 6, 119, 0.06);
 }
 
+.placeholder-spinner {
+  width: 28px; height: 28px; margin: 0 auto; border-radius: 50%;
+  border: 3px solid var(--color-border); border-top-color: var(--color-accent);
+  animation: placeholderSpin 0.7s linear infinite;
+}
+@keyframes placeholderSpin { to { transform: rotate(360deg); } }
+
 .placeholder-icon {
   width: 56px;
   height: 56px;
@@ -804,6 +884,136 @@ export default {
 .subscription-link--ghost:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
+}
+
+.subscription-link--danger {
+  background: transparent;
+  border: 1.5px solid transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.subscription-link--danger:hover {
+  color: var(--color-danger);
+}
+
+/* ── Confirmation de résiliation ───────────────────────  */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-box {
+  background: var(--color-surface);
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 540px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-heading);
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.modal-text {
+  margin: 0 0 14px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+/* Variante avec icône devant (ex. l'aperçu d'éligibilité au remboursement)
+   — jamais sur un paragraphe de texte simple : flex y casse le flux
+   naturel des mots autour d'un <strong> inline (chaque nœud de texte
+   devient un item flex séparé, le texte "saute" au lieu de s'enchaîner). */
+.modal-text-icon {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.modal-text--good { color: var(--color-accent-dark); }
+.modal-text--warn { color: #b45309; }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-ghost {
+  background: none;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-family: var(--font-nav);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-ghost:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  border: 1.5px solid var(--color-danger);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-family: var(--font-nav);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-dark);
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ── Anneau de renouvellement/échéance ─────────────────  */

@@ -5,13 +5,18 @@
         <h1 class="page-title"><i class="bi bi-key"></i> Clés API</h1>
         <p class="page-subtitle">Générez et gérez les clés qui donnent accès à l'API d'adressage BARAMAKI.</p>
       </div>
-      <button v-if="payableSubscriptions.length && !showKeyForm" type="button" class="btn-primary" @click="openKeyForm">
-        <i class="bi bi-plus-lg"></i> Générer une clé
-      </button>
+      <div class="page-head-actions">
+        <router-link to="/documentation-api" class="btn-doc-link">
+          <i class="bi bi-journal-code"></i> Documentation de l'API
+        </router-link>
+        <button v-if="payableSubscriptions.length && !showKeyForm" type="button" class="btn-primary" @click="openKeyForm">
+          <i class="bi bi-plus-lg"></i> Générer une clé
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="placeholder-card">
-      <p class="placeholder-text">Chargement...</p>
+      <div class="placeholder-spinner"></div>
     </div>
 
     <template v-else>
@@ -61,7 +66,30 @@
             {{ keyCopied ? 'Copié' : 'Copier' }}
           </button>
         </div>
-        <button type="button" class="key-reveal-done" @click="revealedKey = null">J'ai copié la clé</button>
+        <button type="button" class="key-reveal-done" @click="showCopyConfirm = true">J'ai copié la clé</button>
+      </div>
+
+      <!-- Confirmation explicite avant disparition définitive — demande
+           explicite : "on n'est pas sûr que c'est bien fait pour copier".
+           Ferme le panneau de révélation SEULEMENT après confirmation,
+           jamais sur le premier clic. -->
+      <div v-if="showCopyConfirm" class="modal-backdrop" @click.self="showCopyConfirm = false">
+        <div class="modal-box">
+          <div class="modal-head">
+            <h4 class="modal-title"><i class="bi bi-exclamation-triangle-fill"></i> Avez-vous bien copié la clé ?</h4>
+            <button type="button" class="modal-close" @click="showCopyConfirm = false"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <p class="modal-text">
+            Assurez-vous d'avoir copié cette clé pour la conserver — une fois cette fenêtre fermée, elle
+            ne sera plus jamais affichée en entier, y compris par un administrateur BARAMAKI.
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="btn-ghost" @click="showCopyConfirm = false">Retour</button>
+            <button type="button" class="btn-primary" :disabled="confirmingCopy" @click="confirmKeyCopied">
+              {{ confirmingCopy ? 'Confirmation...' : "Oui, je l'ai copiée" }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <p v-else-if="payableSubscriptions.length && !keys.length" class="panel-empty-text">
@@ -73,7 +101,10 @@
           <div class="key-row">
             <div class="key-row-main">
               <span class="key-row-prefix">{{ k.keyPrefix }}…</span>
-              <span class="key-row-date">{{ k.planName || 'Forfait' }} · {{ k.domain }}</span>
+              <div class="key-row-meta">
+                <span class="key-row-plan">{{ k.planName || 'Forfait' }}</span>
+                <span class="key-row-domain"><i class="bi bi-globe2"></i>{{ k.domain }}</span>
+              </div>
               <div class="key-row-stats">
                 <span class="key-row-stat"><strong>{{ Number(k.requestsThisMonth || 0).toLocaleString('fr-FR') }}</strong> appel(s) ce mois-ci</span>
                 <span v-if="k.avgResponseTimeMs !== null" class="key-row-stat"><strong>{{ k.avgResponseTimeMs }}</strong> ms en moyenne</span>
@@ -99,7 +130,10 @@
           <div v-if="testingKeyUuid === k.uuid" class="key-test-panel">
             <p class="key-test-hint">
               Simule un vrai appel à <code>GET /api/geo/suggest?q=...</code> avec cette clé — compte dans
-              votre quota mensuel comme n'importe quel appel réel.
+              votre quota mensuel comme n'importe quel appel réel. Le champ ci-dessous est le texte
+              recherché (un nom de lieu comorien, ex. « Fomboni » ou « BDC »), <strong>pas</strong> un
+              domaine — le contrôle de domaine ({{ k.domain }}) n'est pas testé ici, il ne s'applique que
+              depuis votre propre site.
             </p>
             <form class="key-test-form" @submit.prevent="handleTestKey(k)">
               <input
@@ -177,7 +211,7 @@ if (data.status === 'success') {
 
 <script>
 import { useToast } from 'vue-toastification'
-import { getMyClient, generateMyKey, revokeMyKey, testMyKey } from '@/services/geo/geoSelfServiceService'
+import { getMyClient, generateMyKey, revokeMyKey, testMyKey, markMyKeyCopied } from '@/services/geo/geoSelfServiceService'
 
 export default {
   name: 'ApiKeysPage',
@@ -192,7 +226,10 @@ export default {
       generateKeyError: null,
       generatingKey: false,
       revealedKey: null,
+      revealedKeyUuid: null,
       keyCopied: false,
+      showCopyConfirm: false,
+      confirmingCopy: false,
       testingKeyUuid: null,
       testQuery: '',
       testLoading: false,
@@ -243,6 +280,10 @@ export default {
         const { client, plainKey } = await generateMyKey({ subscriptionId, domain: this.newKeyDomain })
         this.myClient = client
         this.revealedKey = plainKey
+        // La plus récente (client.keys triés du plus récent au plus ancien
+        // par serializeMyClient() côté back) — nécessaire pour marquer LA
+        // bonne clé comme copiée une fois confirmé (voir confirmKeyCopied()).
+        this.revealedKeyUuid = client.keys[0]?.uuid || null
         this.keyCopied = false
         this.showKeyForm = false
       } catch (err) {
@@ -256,6 +297,23 @@ export default {
       await navigator.clipboard.writeText(this.revealedKey)
       this.keyCopied = true
       setTimeout(() => { this.keyCopied = false }, 2000)
+    },
+    async confirmKeyCopied() {
+      this.confirmingCopy = true
+      try {
+        if (this.revealedKeyUuid) {
+          this.myClient = await markMyKeyCopied(this.revealedKeyUuid)
+        }
+      } catch {
+        // Best-effort : une confirmation qui échoue à s'enregistrer ne doit
+        // pas empêcher de fermer le panneau — la clé reste de toute façon
+        // définitivement révélée à cet instant, ne pas bloquer le partenaire ici.
+      } finally {
+        this.confirmingCopy = false
+        this.showCopyConfirm = false
+        this.revealedKey = null
+        this.revealedKeyUuid = null
+      }
     },
     async handleRevokeKey(key) {
       try {
@@ -347,8 +405,42 @@ export default {
   flex-shrink: 0;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: var(--color-primary-dark);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.page-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-nav);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-doc-link:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .placeholder-card {
@@ -359,6 +451,13 @@ export default {
   text-align: center;
   box-shadow: 0 4px 24px rgba(4, 6, 119, 0.06);
 }
+
+.placeholder-spinner {
+  width: 28px; height: 28px; margin: 0 auto; border-radius: 50%;
+  border: 3px solid var(--color-border); border-top-color: var(--color-accent);
+  animation: placeholderSpin 0.7s linear infinite;
+}
+@keyframes placeholderSpin { to { transform: rotate(360deg); } }
 
 .placeholder-text {
   font-size: 0.88rem;
@@ -500,8 +599,8 @@ export default {
   gap: 4px;
   border: 1px solid var(--color-border);
   background: var(--color-hover-bg);
-  border-radius: 6px;
-  padding: 5px 10px;
+  border-radius: 8px;
+  padding: 5px 12px;
   font-size: 0.76rem;
   font-weight: 600;
   cursor: pointer;
@@ -575,27 +674,62 @@ export default {
   color: var(--color-heading);
 }
 
-.key-row-date {
+.key-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.key-row-plan {
   font-size: 0.76rem;
   color: var(--color-text-secondary);
+}
+
+/* Domaine — la vraie donnée de sécurité de cette clé ("être sûr que c'est
+   vraiment ce nom de domaine qui l'utilise"), mérite de se voir au premier
+   coup d'œil plutôt que noyé dans une ligne de texte gris. */
+.key-row-domain {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  color: var(--color-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.key-row-domain i {
+  font-size: 0.72rem;
+  opacity: 0.75;
 }
 
 .key-row-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 4px;
   flex-wrap: wrap;
 }
 
 .key-row-stat {
-  font-size: 0.76rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: var(--color-hover-bg);
+  font-size: 0.74rem;
   color: var(--color-text-secondary);
 }
 
 .key-row-stat strong {
   color: var(--color-accent-dark);
   font-weight: 800;
+  font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -624,12 +758,12 @@ export default {
 
 .key-revoke-btn {
   background: none;
-  border: 1px solid var(--color-danger-dark);
+  border: 1.5px solid var(--color-danger-dark);
   color: var(--color-danger-dark);
-  border-radius: 6px;
-  padding: 3px 10px;
+  border-radius: 999px;
+  padding: 4px 14px;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
@@ -645,12 +779,12 @@ export default {
   align-items: center;
   gap: 4px;
   background: none;
-  border: 1px solid var(--color-accent-dark);
+  border: 1.5px solid var(--color-accent-dark);
   color: var(--color-accent-dark);
-  border-radius: 6px;
-  padding: 3px 10px;
+  border-radius: 999px;
+  padding: 4px 14px;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
@@ -794,5 +928,88 @@ export default {
 .key-usage-code-inline--warn {
   color: #b45309;
   background: color-mix(in srgb, #f59e0b 14%, transparent);
+}
+
+/* ── Confirmation de copie de clé ──────────────────────  */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-box {
+  background: var(--color-surface);
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 540px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-heading);
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.modal-text {
+  margin: 0 0 14px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-ghost {
+  background: none;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-family: var(--font-nav);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-ghost:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 </style>

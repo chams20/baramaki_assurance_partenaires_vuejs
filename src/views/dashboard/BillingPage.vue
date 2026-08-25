@@ -8,7 +8,7 @@
     </div>
 
     <div v-if="loading" class="placeholder-card">
-      <p class="placeholder-text">Chargement...</p>
+      <div class="placeholder-spinner"></div>
     </div>
 
     <template v-else>
@@ -131,6 +131,13 @@ export default {
   text-align: center;
   box-shadow: 0 4px 24px rgba(4, 6, 119, 0.06);
 }
+
+.placeholder-spinner {
+  width: 28px; height: 28px; margin: 0 auto; border-radius: 50%;
+  border: 3px solid var(--color-border); border-top-color: var(--color-accent);
+  animation: placeholderSpin 0.7s linear infinite;
+}
+@keyframes placeholderSpin { to { transform: rotate(360deg); } }
 
 .placeholder-icon {
   width: 56px;

@@ -6,7 +6,6 @@
 
       <div v-if="loading" class="company-loading">
         <div class="company-spinner"></div>
-        <p>Chargement...</p>
       </div>
 
       <template v-else-if="myClient">
@@ -182,7 +181,9 @@
                 <label class="field-label">Rue</label>
                 <input v-model="addressForm.street" type="text" class="field-control" :disabled="addressLocked" />
               </div>
-              <div v-if="addressForm.country !== 'Comores'" class="field">
+              <!-- Les numéros de rue existent maintenant aussi aux Comores
+                   (voir GeoStreetNumber, doc 14-lieux-rues-numeros.md). -->
+              <div class="field">
                 <label class="field-label">Numéro</label>
                 <input v-model="addressForm.streetNumber" type="text" class="field-control" :disabled="addressLocked" />
               </div>

@@ -64,22 +64,41 @@ export async function listAvailablePlans() {
  * Souscrit le partenaire connecté à un prix de forfait — POST
  * /api/geo/my-client/subscriptions. Le prix (et la réduction active à cet
  * instant, le cas échéant) est figé côté back au moment de l'appel.
+ * `termsAccepted` doit être `true` (le contrat de souscription — délai de
+ * résiliation/remboursement — a été lu et coché, voir ChoosePlanPage.vue) :
+ * le back refuse la requête avec 400 sinon.
  * @param {string} planPriceId
  */
 export async function subscribeToPlan(planPriceId) {
-  const { data } = await apiClient.post('/api/geo/my-client/subscriptions', { planPriceId })
+  const { data } = await apiClient.post('/api/geo/my-client/subscriptions', { planPriceId, termsAccepted: true })
   return data.client
 }
 
 /**
  * Change de forfait (upgrade seulement — voir doc 12 §3) — POST
  * /api/geo/my-client/subscriptions/upgrade. Le prorata du temps non utilisé
- * sur l'abonnement actuel est calculé côté back, jamais ici.
+ * sur l'abonnement actuel est calculé côté back, jamais ici. Même exigence
+ * `termsAccepted` que subscribeToPlan() — un changement de forfait crée une
+ * nouvelle souscription, donc un nouveau contrat à accepter.
  * @param {string} planPriceId
  */
 export async function upgradeSubscription(planPriceId) {
-  const { data } = await apiClient.post('/api/geo/my-client/subscriptions/upgrade', { planPriceId })
+  const { data } = await apiClient.post('/api/geo/my-client/subscriptions/upgrade', { planPriceId, termsAccepted: true })
   return data.client
+}
+
+/**
+ * Résilie un de ses propres abonnements, à tout moment — PATCH
+ * /api/geo/my-client/subscriptions/{uuid}/cancel. Le remboursement n'est
+ * jamais automatique (voir doc 15) : `refundEligible` indique seulement si
+ * la résiliation tombe dans la fenêtre des 20 jours suivant l'activation,
+ * l'admin traite le remboursement à la main derrière.
+ * @param {string} subscriptionUuid
+ * @returns {Promise<{ client: object, refundEligible: boolean }>}
+ */
+export async function cancelMySubscription(subscriptionUuid) {
+  const { data } = await apiClient.patch(`/api/geo/my-client/subscriptions/${subscriptionUuid}/cancel`)
+  return { client: data.client, refundEligible: data.refundEligible }
 }
 
 /**
@@ -102,6 +121,18 @@ export async function generateMyKey(payload) {
  */
 export async function revokeMyKey(keyUuid) {
   const { data } = await apiClient.patch(`/api/geo/my-client/keys/${keyUuid}/revoke`)
+  return data.client
+}
+
+/**
+ * Confirme explicitement avoir copié la clé en clair avant qu'elle
+ * disparaisse — PATCH /api/geo/my-client/keys/{keyUuid}/mark-copied. Appelé
+ * seulement depuis le modal de confirmation, jamais en fermant simplement le
+ * panneau de révélation (voir GeoApiKey::$copiedAt, doc 15/16).
+ * @param {string} keyUuid
+ */
+export async function markMyKeyCopied(keyUuid) {
+  const { data } = await apiClient.patch(`/api/geo/my-client/keys/${keyUuid}/mark-copied`)
   return data.client
 }
 

@@ -46,6 +46,15 @@ const router = createRouter({
           meta: { title: 'BARAMAKI Partenaires | Clés API' },
         },
         {
+          // Copie adaptée de GeoApiDocsPage.vue (admin, ROLE_SUPER_ADMIN) —
+          // celle-ci est la vraie doc consultable par le partenaire lui-même,
+          // voir docs/refonte-backend/14-lieux-rues-numeros.md côté back.
+          path: 'documentation-api',
+          name: 'api-docs',
+          component: () => import('@/views/dashboard/GeoApiDocsPage.vue'),
+          meta: { title: 'BARAMAKI Partenaires | Documentation API' },
+        },
+        {
           path: 'facturation',
           name: 'billing',
           component: () => import('@/views/dashboard/BillingPage.vue'),

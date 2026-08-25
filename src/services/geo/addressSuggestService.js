@@ -99,15 +99,22 @@ function normalizeBanFeature(feature) {
   }
 }
 
-// `result` = un élément de GET /api/geo/suggest — voir GeoSuggestController
-// côté back pour la forme exacte (type/name/chain/island/region/commune/
-// village/neighborhood/coordinates).
+// `result` = un élément de GET /api/geo/suggest — voir
+// GeoAddressSuggestionService côté back pour la forme exacte
+// (type/category/name/street/number/chain/island/region/commune/village/
+// neighborhood/coordinates). street/streetNumber dépendaient auparavant de
+// champs qui n'existaient pas encore côté back (toujours null) — corrigé le
+// 2026-08-25 en même temps que l'ajout des rues/numéros : un résultat
+// type "street" alimente le champ Rue avec son propre nom, un résultat
+// type "street_number" alimente Rue ET Numéro séparément (result.name est le
+// libellé combiné "12 Sowo Kapwa", pas exploitable tel quel pour préremplir
+// deux champs de formulaire distincts).
 function normalizeComoresResult(result) {
   return {
     provider: 'comores',
     label: `${result.name} — ${result.chain}`,
-    street: null,
-    streetNumber: null,
+    street: result.type === 'street' ? result.name : result.type === 'street_number' ? result.street : null,
+    streetNumber: result.type === 'street_number' ? result.number : null,
     // Notre référentiel n'a pas de notion de "ville" — la commune en tient
     // lieu, c'est le niveau administratif le plus proche.
     city: result.commune ?? null,
