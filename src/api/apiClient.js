@@ -76,4 +76,21 @@ apiClient.interceptors.response.use(
   },
 )
 
+/**
+ * Résout un chemin de fichier renvoyé par le back (logo, document...) en URL
+ * complète affichable — retour direct 2026-09-06, après avoir constaté
+ * qu'une photo/un document envoyé depuis un client ne s'affichait pas
+ * forcément chez l'autre : le back ne stocke plus qu'un CHEMIN RELATIF,
+ * jamais une URL absolue — c'est à CHAQUE client de préfixer avec sa propre
+ * base d'API au moment de l'affichage. `path` déjà absolu (ancien
+ * enregistrement, avant ce changement) : renvoyé tel quel, jamais
+ * doublement préfixé.
+ */
+export function resolveAssetUrl(path) {
+  if (!path || path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+  return `${import.meta.env.VITE_APP_BACK_API_URL}${path}`
+}
+
 export default apiClient

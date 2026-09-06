@@ -246,12 +246,14 @@ export default {
       return Object.keys(this.typeExamples)
     },
     // Un exemple réel par type — capturé en interrogeant le vrai
-    // GeoAddressSuggestionService (2026-08-25), pas inventé à la main :
-    // ce que ce document montre est exactement ce qu'un partenaire reçoit.
+    // GeoAddressSuggestionService (2026-08-25, uuid/photos rafraîchis le
+    // 2026-08-26), pas inventé à la main : ce que ce document montre est
+    // exactement ce qu'un partenaire reçoit.
     typeExamples() {
       return {
         commune: {
           type: 'commune',
+          uuid: '7b8333c8-3f4a-4f2e-b12b-bd22bd09af0f',
           category: null,
           name: 'Fomboni',
           street: null,
@@ -263,9 +265,11 @@ export default {
           village: null,
           neighborhood: null,
           coordinates: { lat: -12.2822, lng: 43.7419 },
+          photos: [],
         },
         village: {
           type: 'village',
+          uuid: '2a547fff-fc9c-4647-b135-9bf6b7a7edff',
           category: null,
           name: 'Mvouni',
           street: null,
@@ -277,9 +281,11 @@ export default {
           village: 'Mvouni',
           neighborhood: null,
           coordinates: { lat: -11.7161, lng: 43.2647 },
+          photos: [],
         },
         neighborhood: {
           type: 'neighborhood',
+          uuid: '18282dbb-87ae-4c3a-aaaa-afbc0502a834',
           category: null,
           name: 'Mouzdalifa',
           street: null,
@@ -293,9 +299,11 @@ export default {
           // Quartier sans coordonnées propres — replié sur celles de son
           // village (Mvouni), même mécanisme que pour une rue ou un numéro.
           coordinates: { lat: -11.7161, lng: 43.2647 },
+          photos: [],
         },
         place: {
           type: 'place',
+          uuid: 'ff008b8b-ca60-4ac4-a9d3-a7220f7d6091',
           category: 'hopital',
           name: 'Hôpital El-Maarouf',
           street: null,
@@ -307,9 +315,11 @@ export default {
           village: null,
           neighborhood: null,
           coordinates: { lat: -11.694722, lng: 43.254444 },
+          photos: [],
         },
         street: {
           type: 'street',
+          uuid: '1966944d-412e-49e0-9fc3-dc2158cd963a',
           category: null,
           name: 'Sowo Kapwa',
           street: null,
@@ -321,9 +331,11 @@ export default {
           village: 'Mvouni',
           neighborhood: 'Ambassabena',
           coordinates: { lat: -11.7161, lng: 43.2647 },
+          photos: [],
         },
         street_number: {
           type: 'street_number',
+          uuid: '66a268c1-28e3-4cd4-a058-209b062a1c7c',
           category: null,
           name: '12 Sowo Kapwa',
           street: 'Sowo Kapwa',
@@ -335,6 +347,7 @@ export default {
           village: 'Mvouni',
           neighborhood: 'Ambassabena',
           coordinates: { lat: -11.7161, lng: 43.2647 },
+          photos: [],
         },
       }
     },

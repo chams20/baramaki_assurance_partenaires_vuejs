@@ -247,7 +247,7 @@
             <a
               v-for="doc in myClient.documents"
               :key="doc.uuid"
-              :href="doc.path"
+              :href="resolveAssetUrl(doc.path)"
               target="_blank"
               rel="noopener"
               class="doc-item"
@@ -428,6 +428,7 @@ import {
 import { suggestAddress, getSupportedCountries } from '@/services/geo/addressSuggestService'
 import PhoneInput from '@/components/shared/PhoneInput.vue'
 import { parsePhone } from '@/utils/phone'
+import { resolveAssetUrl } from '@/api/apiClient'
 
 function emptyAddressForm() {
   return {
@@ -492,7 +493,9 @@ export default {
   },
   computed: {
     logoUrl() {
-      return this.logoPreview || this.myClient?.logoPath || null
+      // `logoPreview` : aperçu local (blob:), déjà une URL complète, jamais
+      // préfixé. `logoPath` vient du back, potentiellement relatif.
+      return this.logoPreview || (this.myClient?.logoPath ? resolveAssetUrl(this.myClient.logoPath) : null)
     },
     supportedCountries() {
       return getSupportedCountries()
